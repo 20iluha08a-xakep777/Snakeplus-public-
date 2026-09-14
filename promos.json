@@ -1,0 +1,12 @@
+{
+  "NOKIA-3310": {
+    "reward": { "type": "coins", "amount": 200 },
+    "expires": 0,
+    "maxUses": 0
+  },
+  "WELCOME": {
+    "reward": { "type": "coins", "amount": 100 },
+    "expires": 0,
+    "maxUses": 0
+  }
+}

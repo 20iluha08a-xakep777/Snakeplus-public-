@@ -13,14 +13,14 @@ body{background:#0d1526;color:#e8eefc;font-family:system-ui,-apple-system,"Segoe
 .hud b{color:#7ee8b0;font-size:13px;margin-left:4px}
 canvas{width:min(94vw,360px);height:min(94vw,360px);border-radius:12px;background:#050a14;box-shadow:0 0 0 2px #2a3a5c,0 0 30px rgba(126,232,176,.15);touch-action:none;display:block}
 .btns{display:flex;gap:8px}
-button{font:inherit;font-size:12px;font-weight:700;padding:8px 14px;border-radius:8px;border:2px solid #7ee8b0;background:transparent;color:#7ee8b0;cursor:pointer;letter-spacing:1px;touch-action:manipulation}
+button{font:inherit;font-size:12px;font-weight:700;padding:8px 14px;border-radius:8px;border:2px solid #7ee8b0;background:transparent;color:#7ee8b0;cursor:pointer;letter-spacing:1px}
 button:active{background:#7ee8b0;color:#06210f}
+.hint{font-size:10px;color:rgba(200,220,255,.4);letter-spacing:1px}
 .overlay{position:fixed;inset:0;background:rgba(5,10,20,.94);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:10;padding:24px;text-align:center}
 .overlay.show{display:flex}
 .overlay h2{color:#7ee8b0;font-size:22px;letter-spacing:3px}
 .overlay p{color:#9fb0d0;font-size:13px;line-height:1.7}
 .overlay b{color:#fff;font-size:16px}
-.hint{font-size:10px;color:rgba(200,220,255,.4);letter-spacing:1px}
 </style>
 </head>
 <body>
@@ -35,37 +35,33 @@ button:active{background:#7ee8b0;color:#06210f}
 'use strict';
 const cvs=document.getElementById('c'),ctx=cvs.getContext('2d');
 const W=360,H=360;
-const ROWS=8,COLS=9;
 const MARGIN=20;
+const BRICK_TOP=30;
+const ROWS=8,COLS=9;
 const BRICK_W=(W-MARGIN*2)/COLS;
 const BRICK_H=16;
-const BRICK_TOP=30;
-let snake,bricks,ball,score,lives,level,running,over,win,ballSpeed,ballDx,ballDy;
-let stickDir=0;
-let hi=Number(localStorage.getItem('snakeark_hi')||0);
+let snake,bricks,ball,score,lives,level,running,over,stickDir,platX;
+const START_LEN=4;
+let hi=Number(localStorage.getItem('sark_hi')||0);
 function initLevel(lvl){
   level=lvl;
-  // build bricks
   bricks=[];
-  const pattern=lvl%4;
-  for(let y=0;y<ROWS;y++){
-    for(let x=0;x<COLS;x++){
-      let fill=true;
-      if(pattern===1&&((x+y)%2===0))fill=false;
-      if(pattern===2&&(y%2===1)&&(x%3===0))fill=false;
-      if(pattern===3&&(x>=3&&x<=5&&y>=3&&y<=4))fill=false;
-      if(fill){
-        const colors=['#ff5252','#ffb84d','#ffd54a','#7ee8b0','#66d9ff','#b07ee8','#ff8ac4'];
-        bricks.push({x,y,hp:1,col:colors[(y+x+lvl)%colors.length]});
-      }
+  const pattern=(lvl-1)%6;
+  for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
+    let fill=true;
+    if(pattern===1&&(x+y)%2===0)fill=false;
+    else if(pattern===2&&y%2===1&&x%3===0)fill=false;
+    else if(pattern===3&&(x<2||x>COLS-3)&&y>2)fill=false;
+    else if(pattern===4&&!(x>=2&&x<=COLS-3&&y>=1&&y<=3))fill=false;
+    else if(pattern===5&&Math.abs(x-4)+Math.abs(y-3)>5)fill=false;
+    if(fill){
+      const colors=['#ff5757','#ffb84d','#ffd54a','#7ee8b0','#66d9ff','#b07ee8','#ff8ac4'];
+      bricks.push({x,y,col:colors[(y+x+lvl)%colors.length]});
     }
   }
-  // snake platform
-  const startLen=4;
   snake=[];
-  for(let i=0;i<startLen;i++)snake.push({});
-  ball={x:W/2,y:H-60,r:6};
-  ballDx=0;ballDy=0;ballSpeed=0;
+  for(let i=0;i<START_LEN;i++)snake.push({});
+  platX=W/2;
   stickDir=0;
   updateHUD();
   document.getElementById('ov').classList.remove('show');
@@ -75,51 +71,25 @@ function updateHUD(){
   document.getElementById('score').textContent=score;
   document.getElementById('lives').textContent='❤'.repeat(Math.max(0,lives));
   document.getElementById('lvl').textContent=level;
-  if(score>hi){hi=score;localStorage.setItem('snakeark_hi',hi);}
+  if(score>hi){hi=score;localStorage.setItem('sark_hi',hi);}
 }
 function launchBall(){
   const ang=-Math.PI/2+(Math.random()-0.5)*0.6;
-  const sp=4+level*0.4;
-  ballDx=Math.cos(ang)*sp;
-  ballDy=Math.sin(ang)*sp;
-  ballSpeed=sp;
-  ball.x=W/2;ball.y=H-60;
+  const sp=4+level*0.3;
+  ball={x:W/2,y:H-60,r:6,dx:Math.cos(ang)*sp,dy:Math.sin(ang)*sp,sp};
 }
-function init(){
-  score=0;lives=3;
-  running=true;over=false;win=false;
-  initLevel(1);
-}
-function platformWidth(){
-  return 60+snake.length*8;
-}
-function platformX(){
-  // platform centered around mouseX
-  return snake.centerX||W/2;
-}
-let platX=W/2;
-function updatePlatform(){
-  const pw=platformWidth();
-  if(stickDir!==0)platX+=stickDir*5;
-  platX=Math.max(pw/2,MARGIN);
-  platX=Math.min(W-pw/2,W-MARGIN);
-}
+function platformWidth(){return 60+snake.length*8;}
 function collideBrick(cx,cy,r){
   for(let i=bricks.length-1;i>=0;i--){
     const b=bricks[i];
     const bx=MARGIN+b.x*BRICK_W;
     const by=BRICK_TOP+b.y*BRICK_H;
-    // closest point
     const nx=Math.max(bx,Math.min(cx,bx+BRICK_W));
     const ny=Math.max(by,Math.min(cy,by+BRICK_H));
     const dx=cx-nx,dy=cy-ny;
     if(dx*dx+dy*dy<=r*r){
-      // reflection
-      if(Math.abs(dx)>Math.abs(dy)){ballDx=-ballDx;} else {ballDy=-ballDy;}
-      // if hit near corner
-      if(dx*dx+dy*dy<r*r*0.5){ballDx=-ballDx;ballDy=-ballDy;}
-      bricks.splice(i,1);
-      score+=10;updateHUD();
+      if(Math.abs(dx)>Math.abs(dy))ball.dx=-ball.dx;else ball.dy=-ball.dy;
+      bricks.splice(i,1);score+=10;updateHUD();
       return true;
     }
   }
@@ -127,109 +97,94 @@ function collideBrick(cx,cy,r){
 }
 function step(){
   if(!running)return;
-  // ball move with substeps
-  const steps=Math.ceil(ballSpeed/3);
-  const stepDx=ballDx/steps,stepDy=ballDy/steps;
+  const steps=Math.ceil(ball.sp/3);
+  const stepDx=ball.dx/steps,stepDy=ball.dy/steps;
   for(let s=0;s<steps;s++){
     ball.x+=stepDx;ball.y+=stepDy;
-    // walls
-    if(ball.x-ball.r<MARGIN){ball.x=MARGIN+ball.r;ballDx=Math.abs(ballDx);}
-    if(ball.x+ball.r>W-MARGIN){ball.x=W-MARGIN-ball.r;ballDx=-Math.abs(ballDx);}
-    if(ball.y-ball.r<MARGIN){ball.y=MARGIN+ball.r;ballDy=Math.abs(ballDy);}
-    // bricks
+    if(ball.x-ball.r<MARGIN){ball.x=MARGIN+ball.r;ball.dx=Math.abs(ball.dx);}
+    if(ball.x+ball.r>W-MARGIN){ball.x=W-MARGIN-ball.r;ball.dx=-Math.abs(ball.dx);}
+    if(ball.y-ball.r<MARGIN){ball.y=MARGIN+ball.r;ball.dy=Math.abs(ball.dy);}
     if(collideBrick(ball.x,ball.y,ball.r))break;
-    // platform
     const py=H-30;
     const pw=platformWidth();
     if(ball.y+ball.r>=py&&ball.y-ball.r<=py+10){
       if(Math.abs(ball.x-platX)<=pw/2+ball.r){
-        // hit platform
         ball.y=py-ball.r;
         const rel=(ball.x-platX)/(pw/2);
         const ang=-Math.PI/2+rel*0.9;
-        const sp=ballSpeed;
-        ballDx=Math.cos(ang)*sp;
-        ballDy=Math.sin(ang)*sp;
-        if(ballDy>0)ballDy=-ballDy;
-        // grow snake sometimes
+        ball.dx=Math.cos(ang)*ball.sp;
+        ball.dy=Math.sin(ang)*ball.sp;
+        if(ball.dy>0)ball.dy=-ball.dy;
         if(Math.random()<0.3&&snake.length<10)snake.push({});
         break;
       }
     }
-    // bottom
     if(ball.y-ball.r>H+10){
-      lives--;
-      updateHUD();
+      lives--;updateHUD();
       if(lives<=0){
         running=false;over=true;
+        window.parent.postMessage({type:'addCoins',amount:Math.max(1,Math.floor(score/20))},'*');
         document.getElementById('ovT').textContent='Игра окончена';
         document.getElementById('ovP').innerHTML='Счёт: <b>'+score+'</b><br>Уровень: <b>'+level+'</b>';
         document.getElementById('ov').classList.add('show');
-        window.parent.postMessage({type:'addCoins',amount:Math.max(1,Math.floor(score/20))},'*');
       } else launchBall();
       return;
     }
   }
-  // win
-  if(bricks.length===0){
-    if(level<5){
-      level++;
+  if(bricks.length===0&&running){
+    running=false;
+    if(level<6){
       score+=200;updateHUD();
-      initLevel(level);
-    } else {
-      running=false;win=true;
-      document.getElementById('ovT').textContent='🏆 Победа!';
-      document.getElementById('ovP').innerHTML='Счёт: <b>'+score+'</b><br>Все 5 уровней пройдены!';
+      window.parent.postMessage({type:'addCoins',amount:Math.max(5,Math.floor(score/20))},'*');
+      document.getElementById('ovT').textContent='🏆 Уровень '+level+'!';
+      document.getElementById('ovP').innerHTML='Счёт: <b>'+score+'</b><br>Загрузка уровня '+(level+1)+'…';
       document.getElementById('ov').classList.add('show');
-      window.parent.postMessage({type:'addCoins',amount:Math.max(20,Math.floor(score/10))},'*');
+      setTimeout(()=>initLevel(level+1),1600);
+    } else {
+      score+=500;updateHUD();
+      window.parent.postMessage({type:'addCoins',amount:Math.max(30,Math.floor(score/10))},'*');
+      document.getElementById('ovT').textContent='🏆 Все 6 уровней!';
+      document.getElementById('ovP').innerHTML='Счёт: <b>'+score+'</b><br>Ты — мастер арканоида!';
+      document.getElementById('ov').classList.add('show');
     }
   }
 }
 function draw(){
   ctx.fillStyle='#050a14';ctx.fillRect(0,0,W,H);
-  // bricks
   for(const b of bricks){
     const bx=MARGIN+b.x*BRICK_W;
     const by=BRICK_TOP+b.y*BRICK_H;
     ctx.fillStyle=b.col;
+    ctx.shadowColor=b.col;ctx.shadowBlur=6;
     ctx.fillRect(bx+1,by+1,BRICK_W-2,BRICK_H-2);
+    ctx.shadowBlur=0;
     ctx.strokeStyle='rgba(255,255,255,.25)';ctx.lineWidth=1;
     ctx.strokeRect(bx+1.5,by+1.5,BRICK_W-3,BRICK_H-3);
-    ctx.fillStyle='rgba(255,255,255,.15)';
-    ctx.fillRect(bx+2,by+2,BRICK_W-4,3);
   }
-  // platform = snake
   const pw=platformWidth();
   const py=H-30;
   const segW=pw/snake.length;
   for(let i=0;i<snake.length;i++){
     const sx=platX-pw/2+i*segW;
     const t=i/Math.max(snake.length-1,1);
-    if(i===snake.length-1){
-      // tail is right
-    }
-    ctx.fillStyle='hsl('+(150+t*30)+','+(70-t*25)+'%,'+(60-t*22)+'%)';
-    if(i===0){ctx.shadowColor='#7ee8b0';ctx.shadowBlur=10;ctx.fillStyle='#a8ffd0';}
+    ctx.fillStyle=i===0?'#a8ffd0':`hsl(${150+t*30},${70-t*25}%,${60-t*22}%)`;
+    if(i===0){ctx.shadowColor='#7ee8b0';ctx.shadowBlur=10;}
     ctx.beginPath();
-    const r=8;
-    if(ctx.roundRect)ctx.roundRect(sx+1,py,r*2,14,r);
+    if(ctx.roundRect)ctx.roundRect(sx+1,py,segW-2,14,8);
     else ctx.rect(sx+1,py,segW-2,14);
-    ctx.fill();
-    ctx.shadowBlur=0;
+    ctx.fill();ctx.shadowBlur=0;
   }
-  // eyes on left end
+  // eyes on left
   ctx.fillStyle='#000';
   ctx.beginPath();ctx.arc(platX-pw/2+6,py+7,2,0,Math.PI*2);ctx.fill();
   ctx.beginPath();ctx.arc(platX-pw/2+12,py+7,2,0,Math.PI*2);ctx.fill();
-  // ball (apple)
-  ctx.shadowColor='#ff5252';ctx.shadowBlur=14;
-  ctx.fillStyle='#ff5252';
+  // ball
+  ctx.shadowColor='#ff5757';ctx.shadowBlur=14;
+  ctx.fillStyle='#ff5757';
   ctx.beginPath();ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2);ctx.fill();
   ctx.shadowBlur=0;
   ctx.fillStyle='#4a8a2a';
-  ctx.beginPath();
-  ctx.ellipse(ball.x+ball.r*0.3,ball.y-ball.r*0.9,ball.r*0.35,ball.r*0.15,-0.5,0,Math.PI*2);
-  ctx.fill();
+  ctx.beginPath();ctx.ellipse(ball.x+ball.r*0.3,ball.y-ball.r*0.9,ball.r*0.35,ball.r*0.15,-0.5,0,Math.PI*2);ctx.fill();
   // borders
   ctx.strokeStyle='#2a3a5c';ctx.lineWidth=2;
   ctx.strokeRect(MARGIN-1,MARGIN-1,W-MARGIN*2+2,H-MARGIN*2+2);
@@ -237,7 +192,13 @@ function draw(){
 let acc=0,last=0;
 function loop(t){
   const dt=Math.min(34,t-(last||t));last=t;
-  updatePlatform();
+  // move platform
+  if(stickDir!==0){
+    const pw=platformWidth();
+    platX+=stickDir*5;
+    platX=Math.max(pw/2,MARGIN);
+    platX=Math.min(W-pw/2,W-MARGIN);
+  }
   if(running){
     acc+=dt;
     while(acc>=16){acc-=16;step();if(!running)break;}
@@ -245,26 +206,21 @@ function loop(t){
   draw();
   requestAnimationFrame(loop);
 }
-function setStick(x){
-  if(x<0)stickDir=-1;else if(x>0)stickDir=1;else stickDir=0;
-}
+function setStick(x){stickDir=x;}
 let tx=0;
 cvs.addEventListener('touchstart',e=>{
   const t=e.touches[0];
   const r=cvs.getBoundingClientRect();
   const px=(t.clientX-r.left)*(W/r.width);
   const pw=platformWidth();
-  if(px<platX-pw/4)setStick(-1);
-  else if(px>platX+pw/4)setStick(1);
+  if(px<platX-pw/4)setStick(-1);else if(px>platX+pw/4)setStick(1);
 },{passive:true});
 cvs.addEventListener('touchmove',e=>{
   const t=e.touches[0];
   const r=cvs.getBoundingClientRect();
   const px=(t.clientX-r.left)*(W/r.width);
   const pw=platformWidth();
-  if(px<platX-pw/4)setStick(-1);
-  else if(px>platX+pw/4)setStick(1);
-  else setStick(0);
+  if(px<platX-pw/4)setStick(-1);else if(px>platX+pw/4)setStick(1);else setStick(0);
 },{passive:true});
 cvs.addEventListener('touchend',()=>setStick(0),{passive:true});
 document.addEventListener('keydown',e=>{
@@ -282,13 +238,13 @@ window.addEventListener('message',e=>{
   else if(d.act==='right')setStick(1);
   else if(d.act==='up'||d.act==='down'||d.act==='ok'||d.act==='a')setStick(0);
   else if(d.act==='back'||d.act==='menu')window.parent.postMessage({type:'exit'},'*');
-  else if(d.act==='ok'&&!running)init();
 });
-document.getElementById('bNew').addEventListener('click',init);
-document.getElementById('ovB').addEventListener('click',init);
+document.getElementById('bNew').addEventListener('click',()=>{score=0;lives=3;initLevel(1);});
+document.getElementById('ovB').addEventListener('click',()=>{score=0;lives=3;initLevel(1);});
 document.getElementById('bExit').addEventListener('click',()=>window.parent.postMessage({type:'exit'},'*'));
 document.body.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
-init();
+score=0;lives=3;
+initLevel(1);
 requestAnimationFrame(loop);
 })();
 </script>

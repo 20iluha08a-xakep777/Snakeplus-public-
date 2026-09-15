@@ -8,30 +8,17 @@
   ],
   "games": [
     {
-      "id": "testgame",
-      "name": "Тест-игра",
-      "icon": "🧪",
-      "price": 0,
-      "rating": 5.0,
-      "size": "1 КБ",
-      "ver": "1.0",
-      "desc": "Проверка связи с GitHub",
-      "category": "arcade",
-      "source": "external",
-      "file": "games/test.html",
-      "enabled": true
-    },
-    {
       "id": "snake2048",
       "name": "Snake-2048",
       "icon": "🐍",
       "price": 3000,
       "rating": 4.7,
-      "size": "2 МБ",
+      "size": "8 КБ",
       "ver": "1.0",
-      "desc": "2048 + змейка",
+      "desc": "2048 + змейка. Каждое яблоко удваивает очки",
       "category": "puzzle",
-      "source": "internal",
+      "source": "external",
+      "file": "games/snake2048.html",
       "enabled": true
     },
     {
@@ -40,11 +27,12 @@
       "icon": "🎯",
       "price": 5000,
       "rating": 4.9,
-      "size": "3 МБ",
+      "size": "12 КБ",
       "ver": "1.2",
-      "desc": "Классика аркад",
+      "desc": "Классика аркад. 4 призрака, энергетические шарики",
       "category": "arcade",
-      "source": "internal",
+      "source": "external",
+      "file": "games/pacman.html",
       "enabled": true
     }
   ],

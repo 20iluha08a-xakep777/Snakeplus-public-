@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Тест-игра</title>
+<style>
+body{margin:0;background:#0d1526;color:#7ee8b0;font-family:system-ui;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100dvh;gap:20px;user-select:none}
+h1{font-size:24px;letter-spacing:4px}
+button{font:inherit;font-size:14px;font-weight:700;padding:12px 24px;border-radius:8px;cursor:pointer;border:2px solid #7ee8b0;background:transparent;color:#7ee8b0}
+button:active{background:#7ee8b0;color:#06210f}
+.msg{font-size:12px;color:rgba(200,220,255,.6);text-align:center;padding:0 20px}
+</style>
+</head>
+<body>
+<h1>🧪 ТЕСТ</h1>
+<div class="msg">Если ты видишь эту игру — связь с GitHub работает!</div>
+<button onclick="sendCoins()">💰 Получить 100 монет</button>
+<button onclick="unlockAch()">🏆 Открыть достижение</button>
+<button onclick="exit()">← Назад в Snake+</button>
+<script>
+function sendCoins(){
+  window.parent.postMessage({type:'addCoins',amount:100},'*');
+  alert('Отправлено! Проверь Snake+');
+}
+function unlockAch(){
+  window.parent.postMessage({type:'unlockAch',id:'test_game'},'*');
+  alert('Достижение отправлено!');
+}
+function exit(){
+  window.parent.postMessage({type:'exit'},'*');
+}
+</script>
+</body>
+</html>

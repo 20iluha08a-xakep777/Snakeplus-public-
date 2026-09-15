@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Snake Blocks</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:#0d1526;color:#e8eefc;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;padding:10px;user-select:none;-webkit-tap-highlight-color:transparent;overflow:hidden;gap:8px}
+.title{font-size:11px;letter-spacing:4px;color:rgba(200,220,255,.5);text-transform:uppercase}
+.hud{width:min(94vw,360px);display:flex;justify-content:space-between;font-size:10px;letter-spacing:1px;color:#9fb0d0}
+.hud b{color:#7ee8b0;font-size:13px;margin-left:4px}
+canvas{width:min(94vw,360px);height:min(94vw,360px);border-radius:12px;background:#050a14;box-shadow:0 0 0 2px #2a3a5c,0 0 30px rgba(126,232,176,.15);touch-action:none;display:block}
+.btns{display:flex;gap:8px}
+button{font:inherit;font-size:12px;font-weight:700;padding:8px 14px;border-radius:8px;border:2px solid #7ee8b0;background:transparent;color:#7ee8b0;cursor:pointer;letter-spacing:1px;touch-action:manipulation}
+button:active{background:#7ee8b0;color:#06210f}
+.dpad{display:grid;grid-template-columns:repeat(3,44px);grid-template-rows:repeat(2,44px);gap:4px}
+.dpad button{width:44px;height:44px;padding:0;font-size:16px;border-radius:10px;border:2px solid #2a3a5c;background:linear-gradient(180deg,#2a3a5c,#1a2540);color:#7ee8b0;display:flex;align-items:center;justify-content:center}
+.dpad .sp{visibility:hidden}
+.overlay{position:fixed;inset:0;background:rgba(5,10,20,.94);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:10;padding:24px;text-align:center}
+.overlay.show{display:flex}
+.overlay h2{color:#7ee8b0;font-size:22px;letter-spacing:3px}
+.overlay p{color:#9fb0d0;font-size:13px;line-height:1.7}
+.overlay b{color:#fff;font-size:16px}
+</style>
+</head>
+<body>
+<div class="title">Snake Blocks</div>
+<div class="hud"><span>СЧЁТ<b id="score">0</b></span><span>БЛОКИ<b id="blocks">0/30</b></span><span>РЕКОРД<b id="hi">0</b></span></div>
+<canvas id="c" width="360" height="360"></canvas>
+<div class="btns"><button id="bNew">Заново</button><button id="bExit">← Назад</button></div>
+<div class="dpad">
+<div class="sp"></div><button data-dir="up">▲</button><div class="sp"></div>
+<button data-dir="left">◀</button><button data-dir="down">▼</button><button data-dir="right">▶</button>
+</div>
+<div class="overlay" id="ov"><h2 id="ovT">Игра окончена</h2><p id="ovP"></p><button id="ovB">Ещё раз</button></div>
+<script>
+(function(){
+'use strict';
+const cvs=document.getElementById('c'),ctx=cvs.getContext('2d');
+const W=360,H=360;
+const G=15,CELL=W/G;
+const TARGET=30;
+let snake,dir,dirQ,blocks,score,collected,running,over,win,acc,last,tickMs;
+let hi=Number(localStorage.getItem('snakeblocks_hi')||0);
+const BLOCK_COLORS=['#ff5252','#ffb84d','#ffd54a','#7ee8b0','#66d9ff','#b07ee8'];
+document.getElementById('hi').textContent=hi;
+function init(){
+  snake=[{x:7,y:7},{x:6,y:7},{x:5,y:7}];
+  dir={x:1,y:0};dirQ=[];
+  blocks=[];
+  score=0;collected=0;
+  running=true;over=false;win=false;
+  acc=0;last=0;tickMs=170;
+  spawnBlocks(3);
+  updateHUD();
+  document.getElementById('ov').classList.remove('show');
+}
+function updateHUD(){
+  document.getElementById('score').textContent=score;
+  document.getElementById('blocks').textContent=collected+'/'+TARGET;
+  if(score>hi){hi=score;localStorage.setItem('snakeblocks_hi',hi);document.getElementById('hi').textContent=hi;}
+}
+function spawnBlocks(n){
+  for(let i=0;i<n;i++){
+    for(let t=0;t<300;t++){
+      const x=Math.floor(Math.random()*G),y=Math.floor(Math.random()*G);
+      if(snake.some(s=>s.x===x&&s.y===y))continue;
+      if(blocks.some(b=>b.x===x&&b.y===y))continue;
+      blocks.push({x,y,color:BLOCK_COLORS[Math.floor(Math.random()*BLOCK_COLORS.length)],born:performance.now()});
+      break;
+    }
+  }
+}
+function setDir(x,y){
+  if(!running)return;
+  const r=dirQ.length?dirQ[dirQ.length-1]:dir;
+  if(r.x===-x&&r.y===-y)return;
+  if(r.x===x&&r.y===y)return;
+  if(dirQ.length>=2)dirQ.shift();
+  dirQ.push({x,y});
+}
+function step(){
+  if(dirQ.length)dir=dirQ.shift();
+  const h={x:snake[0].x+dir.x,y:snake[0].y+dir.y};
+  if(h.x<0||h.x>=G||h.y<0||h.y>=G)return die();
+  for(let i=0;i<snake.length-1;i++)
+    if(snake[i].x===h.x&&snake[i].y===h.y)return die();
+  // check block
+  const idx=blocks.findIndex(b=>b.x===h.x&&b.y===h.y);
+  snake.unshift(h);
+  if(idx>=0){
+    blocks.splice(idx,1);
+    collected++;
+    score+=25;
+    updateHUD();
+    // grow: don't pop tail (block acts as food)
+    if(collected>=TARGET){
+      running=false;win=true;
+      document.getElementById('ovT').textContent='🏆 Все блоки собраны!';
+      document.getElementById('ovP').innerHTML='Счёт: <b>'+score+'</b>';
+      document.getElementById('ov').classList.add('show');
+      window.parent.postMessage({type:'addCoins',amount:Math.max(10,Math.floor(score/10))},'*');
+      return;
+    }
+    // ensure there are always ~4 blocks
+    if(blocks.length<3)spawnBlocks(3-blocks.length);
+    // speed up a bit
+    tickMs=Math.max(80,tickMs-4);
+  } else snake.pop();
+}
+function die(){
+  running=false;over=true;
+  document.getElementById('ovT').textContent='Игра окончена';
+  document.getElementById('ovP').innerHTML='Счёт: <b>'+score+'</b><br>Собрано блоков: <b>'+collected+'/'+TARGET+'</b>';
+  document.getElementById('ov').classList.add('show');
+  window.parent.postMessage({type:'addCoins',amount:Math.max(1,Math.floor(score/20))},'*');
+}
+function draw(){
+  ctx.fillStyle='#050a14';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='rgba(126,232,176,.05)';ctx.lineWidth=1;
+  for(let i=1;i<G;i++){
+    ctx.beginPath();ctx.moveTo(i*CELL,0);ctx.lineTo(i*CELL,H);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,i*CELL);ctx.lineTo(W,i*CELL);ctx.stroke();
+  }
+  // blocks
+  const now=performance.now();
+  for(const b of blocks){
+    const age=Math.min(1,(now-b.born)/300);
+    const cx=b.x*CELL+CELL/2,cy=b.y*CELL+CELL/2;
+    const r=CELL*0.4*age;
+    ctx.shadowColor=b.color;ctx.shadowBlur=14;
+    ctx.fillStyle=b.color;
+    if(ctx.roundRect){ctx.beginPath();ctx.roundRect(cx-r,cy-r,r*2,r*2,4);ctx.fill();}
+    else ctx.fillRect(cx-r,cy-r,r*2,r*2);
+    ctx.shadowBlur=0;
+    // cross pattern
+    ctx.strokeStyle='rgba(255,255,255,.5)';ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(cx-r*0.5,cy-r*0.5);ctx.lineTo(cx+r*0.5,cy+r*0.5);
+    ctx.moveTo(cx+r*0.5,cy-r*0.5);ctx.lineTo(cx-r*0.5,cy+r*0.5);
+    ctx.stroke();
+  }
+  // snake
+  for(let i=snake.length-1;i>=0;i--){
+    const s=snake[i],t=i/Math.max(snake.length-1,1);
+    const r=CELL*0.42-t*0.06;
+    if(i===0){ctx.shadowColor='#7ee8b0';ctx.shadowBlur=14;ctx.fillStyle='#a8ffd0';}
+    else ctx.fillStyle='hsl('+(150+t*30)+','+(70-t*25)+'%,'+(60-t*22)+'%)';
+    const cx=s.x*CELL+CELL/2,cy=s.y*CELL+CELL/2;
+    ctx.beginPath();
+    if(ctx.roundRect)ctx.roundRect(cx-r,cy-r,r*2,r*2,r*0.5);
+    else ctx.rect(cx-r,cy-r,r*2,r*2);
+    ctx.fill();
+    ctx.shadowBlur=0;
+  }
+  // eyes
+  if(snake.length){
+    const h=snake[0];
+    const hx=h.x*CELL+CELL/2,hy=h.y*CELL+CELL/2;
+    const dx=dir.x,dy=dir.y,px=-dy,py=dx;
+    const oF=CELL*0.14,oS=CELL*0.17,eR=CELL*0.09;
+    ctx.fillStyle='#000';
+    ctx.beginPath();ctx.arc(hx+dx*oF+px*oS,hy+dy*oF+py*oS,eR,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(hx+dx*oF-px*oS,hy+dy*oF-py*oS,eR,0,Math.PI*2);ctx.fill();
+  }
+}
+function loop(t){
+  const dt=t-(last||t);last=t;
+  if(running){
+    acc+=dt;
+    while(acc>=tickMs){acc-=tickMs;step();if(!running)break;}
+  }
+  draw();
+  requestAnimationFrame(loop);
+}
+document.querySelectorAll('.dpad button').forEach(b=>{
+  b.addEventListener('click',()=>{
+    const d=b.dataset.dir;
+    if(d==='up')setDir(0,-1);else if(d==='down')setDir(0,1);
+    else if(d==='left')setDir(-1,0);else if(d==='right')setDir(1,0);
+  });
+});
+let tx=0,ty=0;
+cvs.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;},{passive:true});
+cvs.addEventListener('touchend',e=>{
+  const dx=e.changedTouches[0].clientX-tx,dy=e.changedTouches[0].clientY-ty;
+  if(Math.hypot(dx,dy)<18)return;
+  if(Math.abs(dx)>Math.abs(dy))setDir(dx>0?1:-1,0);else setDir(0,dy>0?1:-1);
+},{passive:true});
+document.addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  if(k==='arrowup'||k==='w'||k==='ц'){e.preventDefault();setDir(0,-1);}
+  else if(k==='arrowdown'||k==='s'||k==='ы'){e.preventDefault();setDir(0,1);}
+  else if(k==='arrowleft'||k==='a'||k==='ф'){e.preventDefault();setDir(-1,0);}
+  else if(k==='arrowright'||k==='d'||k==='в'){e.preventDefault();setDir(1,0);}
+});
+window.addEventListener('message',e=>{
+  const d=e.data;if(!d||d.type!=='input')return;
+  if(d.act==='up')setDir(0,-1);else if(d.act==='down')setDir(0,1);
+  else if(d.act==='left')setDir(-1,0);else if(d.act==='right')setDir(1,0);
+  else if(d.act==='back'||d.act==='menu')window.parent.postMessage({type:'exit'},'*');
+  else if(d.act==='ok'&&!running)init();
+});
+document.getElementById('bNew').addEventListener('click',init);
+document.getElementById('ovB').addEventListener('click',init);
+document.getElementById('bExit').addEventListener('click',()=>window.parent.postMessage({type:'exit'},'*'));
+document.body.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+init();
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

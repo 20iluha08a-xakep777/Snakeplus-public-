@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Лабиринт</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:#0d1526;color:#e8eefc;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;padding:10px;user-select:none;-webkit-tap-highlight-color:transparent;overflow:hidden;gap:8px}
+.title{font-size:11px;letter-spacing:4px;color:rgba(200,220,255,.5);text-transform:uppercase}
+.hud{width:min(94vw,360px);display:flex;justify-content:space-between;font-size:10px;letter-spacing:1px;color:#9fb0d0}
+.hud b{color:#7ee8b0;font-size:13px;margin-left:4px}
+canvas{width:min(94vw,360px);height:min(94vw,360px);border-radius:12px;background:#050a14;box-shadow:0 0 0 2px #2a3a5c,0 0 30px rgba(126,232,176,.15);touch-action:none;display:block}
+.btns{display:flex;gap:8px}
+button{font:inherit;font-size:12px;font-weight:700;padding:8px 16px;border-radius:8px;border:2px solid #7ee8b0;background:transparent;color:#7ee8b0;cursor:pointer;letter-spacing:1px;touch-action:manipulation}
+button:active{background:#7ee8b0;color:#06210f}
+.dpad{display:grid;grid-template-columns:repeat(3,46px);grid-template-rows:repeat(2,46px);gap:4px}
+.dpad button{width:46px;height:46px;padding:0;font-size:18px;border-radius:10px;border:2px solid #2a3a5c;background:linear-gradient(180deg,#2a3a5c,#1a2540);color:#7ee8b0;display:flex;align-items:center;justify-content:center}
+.dpad .sp{visibility:hidden}
+.overlay{position:fixed;inset:0;background:rgba(5,10,20,.94);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:10;padding:24px;text-align:center}
+.overlay.show{display:flex}
+.overlay h2{color:#7ee8b0;font-size:22px;letter-spacing:3px}
+.overlay p{color:#9fb0d0;font-size:13px;line-height:1.7}
+.overlay b{color:#fff;font-size:16px}
+</style>
+</head>
+<body>
+<div class="title">Лабиринт</div>
+<div class="hud"><span>УРОВЕНЬ<b id="lvl">1</b></span><span>ШАГИ<b id="steps">0</b></span><span>СЧЁТ<b id="score">0</b></span></div>
+<canvas id="c" width="360" height="360"></canvas>
+<div class="btns"><button id="bNew">Заново</button><button id="bExit">← Назад</button></div>
+<div class="dpad">
+<div class="sp"></div><button data-dir="up">▲</button><div class="sp"></div>
+<button data-dir="left">◀</button><button data-dir="down">▼</button><button data-dir="right">▶</button>
+</div>
+<div class="overlay" id="ov"><h2 id="ovT">Игра окончена</h2><p id="ovP"></p><button id="ovB">Ещё раз</button></div>
+<script>
+(function(){
+'use strict';
+const cvs=document.getElementById('c'),ctx=cvs.getContext('2d');
+const W=360,H=360;
+const LEVEL_SIZES=[11,13,15,17,19];
+let maze,cols,rows,CELL,OX,OY;
+let head,apple,dir,nextDir,running,over,win,steps,score,level,tickMs,acc,last;
+let hi=Number(localStorage.getItem('maze_hi')||0);
+function genMaze(c,r){
+  const m=[];
+  for(let y=0;y<r;y++){m[y]=[];for(let x=0;x<c;x++)m[y][x]=1;}
+  m[1][1]=0;
+  const stack=[[1,1]];
+  const dirs=[[0,-2],[0,2],[-2,0],[2,0]];
+  while(stack.length){
+    const [x,y]=stack[stack.length-1];
+    const n=[];
+    for(const [dx,dy] of dirs){
+      const nx=x+dx,ny=y+dy;
+      if(nx>0&&nx<c-1&&ny>0&&ny<r-1&&m[ny][nx]===1)n.push([nx,ny,x+dx/2,y+dy/2]);
+    }
+    if(!n.length)stack.pop();
+    else{
+      const [nx,ny,wx,wy]=n[Math.floor(Math.random()*n.length)];
+      m[wy][wx]=0;m[ny][nx]=0;stack.push([nx,ny]);
+    }
+  }
+  // Добавляем случайные петли (убираем немного стен для вариативности)
+  const loops=Math.floor(c*r*0.04);
+  for(let i=0;i<loops;i++){
+    const x=1+Math.floor(Math.random()*(c-2));
+    const y=1+Math.floor(Math.random()*(r-2));
+    if(m[y][x]===1){
+      let walls=0;
+      if(m[y-1][x]===1)walls++;
+      if(m[y+1][x]===1)walls++;
+      if(m[y][x-1]===1)walls++;
+      if(m[y][x+1]===1)walls++;
+      if(walls<=2)m[y][x]=0;
+    }
+  }
+  return m;
+}
+function initLevel(lvl){
+  level=lvl;
+  const size=LEVEL_SIZES[Math.min(lvl-1,LEVEL_SIZES.length-1)];
+  cols=size;rows=size;
+  maze=genMaze(cols,rows);
+  CELL=Math.min(W/cols,H/rows);
+  OX=(W-cols*CELL)/2;OY=(H-rows*CELL)/2;
+  head={x:1,y:1};
+  apple={x:cols-2,y:rows-2};
+  maze[apple.y][apple.x]=0;
+  dir={x:0,y:0};nextDir={x:0,y:0};
+  running=true;over=false;win=false;
+  steps=0;acc=0;last=0;
+  tickMs=Math.max(110,180-lvl*10);
+  updateHUD();
+  document.getElementById('ov').classList.remove('show');
+}
+function updateHUD(){
+  document.getElementById('lvl').textContent=level;
+  document.getElementById('steps').textContent=steps;
+  document.getElementById('score').textContent=score;
+}
+function isWall(x,y){
+  if(x<0||x>=cols||y<0||y>=rows)return true;
+  return maze[y][x]===1;
+}
+function step(){
+  if(nextDir.x||nextDir.y){
+    const nx=head.x+nextDir.x,ny=head.y+nextDir.y;
+    if(!isWall(nx,ny)){dir=nextDir;nextDir={x:0,y:0};}
+  }
+  if(dir.x||dir.y){
+    const nx=head.x+dir.x,ny=head.y+dir.y;
+    if(!isWall(nx,ny)){head.x=nx;head.y=ny;steps++;updateHUD();}
+    else dir={x:0,y:0};
+  }
+  if(head.x===apple.x&&head.y===apple.y){
+    const bonus=Math.max(10,200-steps*2);
+    score+=bonus;
+    if(score>hi){hi=score;localStorage.setItem('maze_hi',hi);}
+    updateHUD();
+    window.parent.postMessage({type:'addCoins',amount:Math.max(3,Math.floor(bonus/10))},'*');
+    if(level<LEVEL_SIZES.length){
+      running=false;
+      document.getElementById('ovT').textContent='Уровень '+level+' пройден!';
+      document.getElementById('ovP').innerHTML='Бонус: <b>+'+bonus+'</b><br>Шагов: <b>'+steps+'</b>';
+      document.getElementById('ov').classList.add('show');
+      setTimeout(()=>{initLevel(level+1);},1500);
+    } else {
+      running=false;over=true;
+      document.getElementById('ovT').textContent='🏆 Все уровни пройдены!';
+      document.getElementById('ovP').innerHTML='Итог: <b>'+score+'</b><br>Ты нашёл яблоки во всех лабиринтах!';
+      document.getElementById('ov').classList.add('show');
+      window.parent.postMessage({type:'addCoins',amount:100},'*');
+    }
+  }
+}
+function draw(){
+  ctx.fillStyle='#050a14';ctx.fillRect(0,0,W,H);
+  // Walls
+  for(let y=0;y<rows;y++){
+    for(let x=0;x<cols;x++){
+      if(maze[y][x]===1){
+        const px=OX+x*CELL,py=OY+y*CELL;
+        ctx.fillStyle='#1a3a6a';
+        ctx.fillRect(px,py,CELL,CELL);
+        ctx.strokeStyle='#3a6ac0';ctx.lineWidth=1;
+        ctx.strokeRect(px+0.5,py+0.5,CELL-1,CELL-1);
+      }
+    }
+  }
+  // Apple
+  const ax=OX+apple.x*CELL+CELL/2,ay=OY+apple.y*CELL+CELL/2;
+  ctx.shadowColor='#ff5252';ctx.shadowBlur=14;
+  ctx.fillStyle='#ff5252';
+  ctx.beginPath();ctx.arc(ax,ay,CELL*0.38,0,Math.PI*2);ctx.fill();
+  ctx.shadowBlur=0;
+  ctx.fillStyle='#4a8a2a';
+  ctx.beginPath();
+  ctx.ellipse(ax+CELL*0.08,ay-CELL*0.32,CELL*0.14,CELL*0.07,-0.5,0,Math.PI*2);
+  ctx.fill();
+  // Snake head
+  const hx=OX+head.x*CELL+CELL/2,hy=OY+head.y*CELL+CELL/2;
+  ctx.shadowColor='#7ee8b0';ctx.shadowBlur=14;
+  ctx.fillStyle='#a8ffd0';
+  ctx.beginPath();
+  const r=CELL*0.42;
+  if(ctx.roundRect)ctx.roundRect(hx-r,hy-r,r*2,r*2,r*0.55);
+  else ctx.rect(hx-r,hy-r,r*2,r*2);
+  ctx.fill();
+  ctx.shadowBlur=0;
+  // Eyes
+  const dx=dir.x,dy=dir.y;
+  const px=-dy,py=dx;
+  const oF=CELL*0.14,oS=CELL*0.17,eR=CELL*0.085;
+  if(dx||dy){
+    ctx.fillStyle='#000';
+    ctx.beginPath();
+    ctx.arc(hx+dx*oF+px*oS,hy+dy*oF+py*oS,eR,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();
+    ctx.arc(hx+dx*oF-px*oS,hy+dy*oF-py*oS,eR,0,Math.PI*2);ctx.fill();
+  } else {
+    ctx.fillStyle='#000';
+    ctx.beginPath();ctx.arc(hx-CELL*0.14,hy,eR,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(hx+CELL*0.14,hy,eR,0,Math.PI*2);ctx.fill();
+  }
+}
+function loop(t){
+  const dt=t-(last||t);last=t;
+  if(running){
+    acc+=dt;
+    while(acc>=tickMs){acc-=tickMs;step();if(!running)break;}
+  }
+  draw();
+  requestAnimationFrame(loop);
+}
+function setDir(x,y){if(!running)return;nextDir={x,y};}
+document.querySelectorAll('.dpad button').forEach(b=>{
+  b.addEventListener('click',()=>{
+    const d=b.dataset.dir;
+    if(d==='up')setDir(0,-1);else if(d==='down')setDir(0,1);
+    else if(d==='left')setDir(-1,0);else if(d==='right')setDir(1,0);
+  });
+});
+let tx=0,ty=0;
+cvs.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;},{passive:true});
+cvs.addEventListener('touchend',e=>{
+  const dx=e.changedTouches[0].clientX-tx,dy=e.changedTouches[0].clientY-ty;
+  if(Math.hypot(dx,dy)<18)return;
+  if(Math.abs(dx)>Math.abs(dy))setDir(dx>0?1:-1,0);else setDir(0,dy>0?1:-1);
+},{passive:true});
+document.addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  if(k==='arrowup'||k==='w'||k==='ц'){e.preventDefault();setDir(0,-1);}
+  else if(k==='arrowdown'||k==='s'||k==='ы'){e.preventDefault();setDir(0,1);}
+  else if(k==='arrowleft'||k==='a'||k==='ф'){e.preventDefault();setDir(-1,0);}
+  else if(k==='arrowright'||k==='d'||k==='в'){e.preventDefault();setDir(1,0);}
+});
+window.addEventListener('message',e=>{
+  const d=e.data;if(!d||d.type!=='input')return;
+  if(d.act==='up')setDir(0,-1);else if(d.act==='down')setDir(0,1);
+  else if(d.act==='left')setDir(-1,0);else if(d.act==='right')setDir(1,0);
+  else if(d.act==='back'||d.act==='menu')window.parent.postMessage({type:'exit'},'*');
+});
+document.getElementById('bNew').addEventListener('click',()=>{score=0;initLevel(1);});
+document.getElementById('ovB').addEventListener('click',()=>{score=0;initLevel(1);});
+document.getElementById('bExit').addEventListener('click',()=>window.parent.postMessage({type:'exit'},'*'));
+document.body.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+score=0;
+initLevel(1);
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

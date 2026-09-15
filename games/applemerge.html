@@ -10,24 +10,24 @@ html,body{height:100%}
 body{background:#0d1526;color:#e8eefc;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;padding:10px;user-select:none;-webkit-tap-highlight-color:transparent;overflow:hidden;gap:8px}
 .title{font-size:11px;letter-spacing:4px;color:rgba(200,220,255,.5);text-transform:uppercase}
 .hud{width:min(94vw,380px);display:flex;justify-content:space-between;font-size:10px;letter-spacing:1px;color:#9fb0d0}
-.hud b{color:#ffd54a;font-size:13px;margin-left:4px}
-canvas{width:min(94vw,380px);height:min(94vw,380px);border-radius:12px;background:#0a1526;box-shadow:0 0 0 2px #2a3a5c,0 0 30px rgba(255,213,74,.15);touch-action:none;display:block}
+.hud b{color:#7ee8b0;font-size:13px;margin-left:4px}
+canvas{width:min(94vw,380px);height:min(94vw,380px);border-radius:12px;background:#050a14;box-shadow:0 0 0 2px #2a3a5c,0 0 30px rgba(126,232,176,.15);touch-action:none;display:block}
 .btns{display:flex;gap:8px}
-button{font:inherit;font-size:12px;font-weight:700;padding:8px 16px;border-radius:8px;border:2px solid #ffd54a;background:transparent;color:#ffd54a;cursor:pointer;letter-spacing:1px;touch-action:manipulation}
-button:active{background:#ffd54a;color:#0d1526}
+button{font:inherit;font-size:12px;font-weight:700;padding:8px 14px;border-radius:8px;border:2px solid #7ee8b0;background:transparent;color:#7ee8b0;cursor:pointer;letter-spacing:1px}
+button:active{background:#7ee8b0;color:#06210f}
+.dpad{display:grid;grid-template-columns:repeat(3,44px);grid-template-rows:repeat(2,44px);gap:4px}
+.dpad button{width:44px;height:44px;padding:0;font-size:16px;border-radius:10px;border:2px solid #2a3a5c;background:linear-gradient(180deg,#2a3a5c,#1a2540);color:#7ee8b0;display:flex;align-items:center;justify-content:center}
+.dpad .sp{visibility:hidden}
 .overlay{position:fixed;inset:0;background:rgba(5,10,20,.94);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:10;padding:24px;text-align:center}
 .overlay.show{display:flex}
-.overlay h2{color:#ffd54a;font-size:22px;letter-spacing:3px}
+.overlay h2{color:#7ee8b0;font-size:22px;letter-spacing:3px}
 .overlay p{color:#9fb0d0;font-size:13px;line-height:1.7}
 .overlay b{color:#fff;font-size:16px}
-.dpad{display:grid;grid-template-columns:repeat(3,46px);grid-template-rows:repeat(2,46px);gap:4px}
-.dpad button{width:46px;height:46px;padding:0;font-size:18px;border-radius:10px;border:2px solid #2a3a5c;background:linear-gradient(180deg,#2a3a5c,#1a2540);color:#ffd54a;display:flex;align-items:center;justify-content:center}
-.dpad .sp{visibility:hidden}
 </style>
 </head>
 <body>
 <div class="title">Apple Merge</div>
-<div class="hud"><span>СЧЁТ<b id="score">0</b></span><span>РЕКОРД<b id="hi">0</b></span><span>ТОП<b id="top">🍒</b></span></div>
+<div class="hud"><span>СЧЁТ<b id="score">0</b></span><span>ТОП<b id="top">🍒</b></span><span>УР.<b id="lvl">1</b></span></div>
 <canvas id="c" width="380" height="380"></canvas>
 <div class="btns"><button id="bNew">Заново</button><button id="bExit">← Назад</button></div>
 <div class="dpad">
@@ -39,273 +39,212 @@ button:active{background:#ffd54a;color:#0d1526}
 (function(){
 'use strict';
 const FRUITS=[
-  {emoji:'🍒',name:'Вишня',      val:2,   color:'#c8304a'},
-  {emoji:'🍓',name:'Земляника',  val:4,   color:'#e54a5c'},
-  {emoji:'🍇',name:'Виноград',   val:8,   color:'#8a4fc7'},
-  {emoji:'🍊',name:'Апельсин',   val:16,  color:'#f08a20'},
-  {emoji:'🍎',name:'Яблоко',     val:32,  color:'#d63a2e'},
-  {emoji:'🍉',name:'Арбуз',      val:64,  color:'#2ea85c'},
-  {emoji:'👑',name:'Золото',     val:128, color:'#ffc107'}
+  {emoji:'🍒',val:2,color:'#c8304a'},
+  {emoji:'🍓',val:4,color:'#e54a5c'},
+  {emoji:'🍇',val:8,color:'#8a4fc7'},
+  {emoji:'🍊',val:16,color:'#f08a20'},
+  {emoji:'🍎',val:32,color:'#d63a2e'},
+  {emoji:'🍉',val:64,color:'#2ea85c'},
+  {emoji:'👑',val:128,color:'#ffc107'}
 ];
-const COLS=6,ROWS=8;
+const LEVELS=[
+  {cols:5,rows:7,spawnMax:1},
+  {cols:5,rows:7,spawnMax:2},
+  {cols:6,rows:8,spawnMax:2},
+  {cols:6,rows:8,spawnMax:3},
+  {cols:7,rows:9,spawnMax:3},
+  {cols:7,rows:9,spawnMax:4}
+];
 const cvs=document.getElementById('c'),ctx=cvs.getContext('2d');
 const W=380,H=380;
-const CELL=Math.min(W/COLS,H/ROWS);
-const OX=(W-COLS*CELL)/2,OY=(H-ROWS*CELL)/2;
-let grid,score,level,over,win,running,dropCol,dropAnim;
-let hi=Number(localStorage.getItem('applemerge_hi')||0);
-let topFruit=localStorage.getItem('applemerge_top')||'🍒';
-document.getElementById('hi').textContent=hi;
-document.getElementById('top').textContent=topFruit;
-function init(){
+let cols,rows,CELL,OX,OY;
+let grid,score,level,over,win,running,dropCol;
+let hi=Number(localStorage.getItem('am_hi')||0);
+function initLevel(lvl){
+  level=lvl;
+  const cfg=LEVELS[Math.min(lvl-1,LEVELS.length-1)];
+  cols=cfg.cols;rows=cfg.rows;
+  CELL=Math.min(W/cols,H/rows);
+  OX=(W-cols*CELL)/2;OY=(H-rows*CELL)/2;
   grid=[];
-  for(let y=0;y<ROWS;y++){grid[y]=[];for(let x=0;x<COLS;x++)grid[y][x]=null;}
-  score=0;level=1;over=false;win=false;running=true;
-  dropCol=-1;dropAnim=null;
+  for(let y=0;y<rows;y++){grid[y]=[];for(let x=0;x<cols;x++)grid[y][x]=null;}
+  score=0;over=false;win=false;running=true;dropCol=-1;
   updateHUD();
   document.getElementById('ov').classList.remove('show');
 }
 function updateHUD(){
   document.getElementById('score').textContent=score;
-  if(score>hi){hi=score;localStorage.setItem('applemerge_hi',hi);document.getElementById('hi').textContent=hi;}
+  document.getElementById('lvl').textContent=level;
+  let maxIdx=0;
+  for(let y=0;y<rows;y++)for(let x=0;x<cols;x++)if(grid[y][x]&&grid[y][x].idx>maxIdx)maxIdx=grid[y][x].idx;
+  document.getElementById('top').textContent=FRUITS[maxIdx].emoji;
+  if(score>hi){hi=score;localStorage.setItem('am_hi',hi);}
 }
-function dropFruit(col){
-  if(!running||over)return;
-  // Find lowest empty row in column
-  let row=-1;
-  for(let y=ROWS-1;y>=0;y--){
-    if(grid[y][col]===null){row=y;break;}
+function gravity(){
+  for(let x=0;x<cols;x++){
+    const col=[];
+    for(let y=0;y<rows;y++)if(grid[y][x])col.push(grid[y][x]);
+    for(let y=0;y<rows;y++)grid[y][x]=null;
+    for(let i=0;i<col.length;i++)grid[rows-col.length+i][x]=col[i];
   }
-  if(row===-1)return;
-  // Random small fruit (1-3)
-  const r=Math.random();
-  let idx=0;
-  if(r<0.6)idx=0;else if(r<0.9)idx=1;else idx=2;
-  grid[row][col]={idx,born:performance.now()};
-  cascadeMerges();
-  checkGameOver();
 }
-function findNeighbors(x,y){
-  const n=[];
-  if(x>0)n.push([x-1,y]);
-  if(x<COLS-1)n.push([x+1,y]);
-  if(y>0)n.push([x,y-1]);
-  if(y<ROWS-1)n.push([x,y+1]);
-  return n;
-}
-function cascadeMerges(){
-  let changed=true;
-  let safety=0;
-  while(changed&&safety<200){
-    changed=false;safety++;
-    for(let y=ROWS-1;y>=0;y--){
-      for(let x=0;x<COLS;x++){
-        const cell=grid[y][x];
-        if(!cell)continue;
-        const neighbors=findNeighbors(x,y);
-        let merged=false;
-        for(const [nx,ny] of neighbors){
-          const other=grid[ny][nx];
-          if(other&&other.idx===cell.idx&&cell.idx<FRUITS.length-1){
-            // Merge: cell becomes next tier, other disappears
-            const newIdx=cell.idx+1;
-            const newVal=FRUITS[newIdx].val;
-            score+=newVal;
-            grid[y][x]={idx:newIdx,born:performance.now()};
+function cascade(){
+  let merged=true,safety=0;
+  while(merged&&safety<100){
+    merged=false;safety++;
+    // bottom-up, left-right
+    outer:
+    for(let y=rows-1;y>=0;y--){
+      for(let x=0;x<cols;x++){
+        const c=grid[y][x];
+        if(!c||c.idx>=FRUITS.length-1)continue;
+        // check right and down
+        for(const [dx,dy] of [[1,0],[0,1]]){
+          const nx=x+dx,ny=y+dy;
+          if(nx>=cols||ny>=rows)continue;
+          const o=grid[ny][nx];
+          if(o&&o.idx===c.idx){
+            const ni=c.idx+1;
+            score+=FRUITS[ni].val;
+            grid[y][x]={idx:ni,born:performance.now()};
             grid[ny][nx]=null;
-            changed=true;merged=true;
-            if(newIdx===FRUITS.length-1){
-              win=true;
-            }
-            break;
+            gravity();
+            merged=true;
+            break outer;
           }
         }
-        if(merged)break;
-      }
-      if(changed)break;
-    }
-    if(changed){
-      // Gravity: fruits fall to lowest empty cell in column
-      for(let x=0;x<COLS;x++){
-        const column=[];
-        for(let y=0;y<ROWS;y++)if(grid[y][x])column.push(grid[y][x]);
-        for(let y=0;y<ROWS;y++)grid[y][x]=null;
-        for(let i=0;i<column.length;i++)grid[ROWS-column.length+i][x]=column[i];
       }
     }
   }
   updateHUD();
-  // Update top fruit
+  // win?
   let maxIdx=0;
-  for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
-    if(grid[y][x]&&grid[y][x].idx>maxIdx)maxIdx=grid[y][x].idx;
-  }
-  topFruit=FRUITS[maxIdx].emoji;
-  localStorage.setItem('applemerge_top',topFruit);
-  document.getElementById('top').textContent=topFruit;
-  if(win&&!over){
-    over=true;running=false;
-    setTimeout(()=>{
-      document.getElementById('ovT').textContent='🏆 Золото!';
-      document.getElementById('ovP').innerHTML='Счёт: <b>'+score+'</b><br>Ты собрал золотой трофей!';
+  for(let y=0;y<rows;y++)for(let x=0;x<cols;x++)if(grid[y][x]&&grid[y][x].idx>maxIdx)maxIdx=grid[y][x].idx;
+  if(maxIdx===FRUITS.length-1&&!win){
+    win=true;running=false;over=true;
+    const reward=Math.max(15,Math.floor(score/5));
+    window.parent.postMessage({type:'addCoins',amount:reward},'*');
+    document.getElementById('ovT').textContent='🏆 Уровень '+level+'!';
+    if(level<LEVELS.length){
+      document.getElementById('ovP').innerHTML='Собран 👑!<br>Счёт: <b>'+score+'</b><br>Следующий: поле '+LEVELS[level].cols+'×'+LEVELS[level].rows;
       document.getElementById('ov').classList.add('show');
-      window.parent.postMessage({type:'addCoins',amount:Math.max(20,Math.floor(score/5))},'*');
-    },500);
+      setTimeout(()=>initLevel(level+1),1800);
+    } else {
+      document.getElementById('ovP').innerHTML='Счёт: <b>'+score+'</b><br>Все 6 уровней пройдены!';
+      document.getElementById('ov').classList.add('show');
+    }
   }
 }
+function dropFruit(col){
+  if(!running||over)return;
+  if(col<0||col>=cols)return;
+  let row=-1;
+  for(let y=rows-1;y>=0;y--)if(grid[y][col]===null){row=y;break;}
+  if(row===-1)return;
+  const maxIdx=LEVELS[Math.min(level-1,LEVELS.length-1)].spawnMax;
+  const r=Math.random();
+  let idx=0;
+  if(r<0.5)idx=0;
+  else if(r<0.8)idx=Math.min(1,maxIdx);
+  else idx=Math.min(2,maxIdx);
+  grid[row][col]={idx,born:performance.now()};
+  gravity();
+  cascade();
+  checkGameOver();
+}
 function checkGameOver(){
-  // Top row full → game over
+  if(over)return;
   let topFull=true;
-  for(let x=0;x<COLS;x++){if(grid[0][x]===null){topFull=false;break;}}
-  if(topFull&&!over){
-    over=true;running=false;
-    setTimeout(()=>{
-      document.getElementById('ovT').textContent='Игра окончена';
-      document.getElementById('ovP').innerHTML='Счёт: <b>'+score+'</b><br>Топ: <b>'+topFruit+'</b>';
-      document.getElementById('ov').classList.add('show');
-      window.parent.postMessage({type:'addCoins',amount:Math.max(1,Math.floor(score/15))},'*');
-    },300);
+  for(let x=0;x<cols;x++)if(grid[0][x]===null){topFull=false;break;}
+  if(topFull){
+    running=false;over=true;
+    window.parent.postMessage({type:'addCoins',amount:Math.max(1,Math.floor(score/15))},'*');
+    document.getElementById('ovT').textContent='Поле заполнено';
+    document.getElementById('ovP').innerHTML='Счёт: <b>'+score+'</b><br>Уровень: <b>'+level+'</b>';
+    document.getElementById('ov').classList.add('show');
   }
 }
 function draw(){
-  ctx.fillStyle='#0a1526';ctx.fillRect(0,0,W,H);
-  // Grid lines
+  ctx.fillStyle='#050a14';ctx.fillRect(0,0,W,H);
+  // grid
   ctx.strokeStyle='rgba(126,232,176,.06)';ctx.lineWidth=1;
-  for(let i=1;i<COLS;i++){
-    ctx.beginPath();ctx.moveTo(OX+i*CELL,OY);ctx.lineTo(OX+i*CELL,OY+ROWS*CELL);ctx.stroke();
+  for(let i=1;i<cols;i++){
+    ctx.beginPath();ctx.moveTo(OX+i*CELL,OY);ctx.lineTo(OX+i*CELL,OY+rows*CELL);ctx.stroke();
   }
-  for(let i=1;i<ROWS;i++){
-    ctx.beginPath();ctx.moveTo(OX,OY+i*CELL);ctx.lineTo(OX+COLS*CELL,OY+i*CELL);ctx.stroke();
+  for(let i=1;i<rows;i++){
+    ctx.beginPath();ctx.moveTo(OX,OY+i*CELL);ctx.lineTo(OX+cols*CELL,OY+i*CELL);ctx.stroke();
   }
-  // Container frame
   ctx.strokeStyle='#2a3a5c';ctx.lineWidth=2;
-  ctx.strokeRect(OX-1,OY-1,COLS*CELL+2,ROWS*CELL+2);
-  // Danger line (top row)
-  ctx.strokeStyle='rgba(255,82,82,.35)';ctx.lineWidth=2;
-  ctx.setLineDash([5,5]);
-  ctx.beginPath();ctx.moveTo(OX,OY+CELL);ctx.lineTo(OX+COLS*CELL,OY+CELL);ctx.stroke();
+  ctx.strokeRect(OX-1,OY-1,cols*CELL+2,rows*CELL+2);
+  // danger line
+  ctx.strokeStyle='rgba(255,82,82,.35)';ctx.lineWidth=2;ctx.setLineDash([5,5]);
+  ctx.beginPath();ctx.moveTo(OX,OY+CELL);ctx.lineTo(OX+cols*CELL,OY+CELL);ctx.stroke();
   ctx.setLineDash([]);
-  // Fruits
   const now=performance.now();
-  for(let y=0;y<ROWS;y++){
-    for(let x=0;x<COLS;x++){
-      const cell=grid[y][x];
-      if(!cell)continue;
-      const f=FRUITS[cell.idx];
-      const cx=OX+x*CELL+CELL/2,cy=OY+y*CELL+CELL/2;
-      const age=Math.min(1,(now-cell.born)/250);
-      const r=CELL*0.42*age;
-      // Shadow
-      ctx.shadowColor=f.color;ctx.shadowBlur=12;
-      ctx.fillStyle=f.color;
-      ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();
-      ctx.shadowBlur=0;
-      // Highlight
-      ctx.fillStyle='rgba(255,255,255,.25)';
-      ctx.beginPath();ctx.arc(cx-r*0.3,cy-r*0.3,r*0.35,0,Math.PI*2);ctx.fill();
-      // Emoji
-      if(age>0.4){
-        ctx.font=(CELL*0.65)+'px serif';
-        ctx.textAlign='center';ctx.textBaseline='middle';
-        ctx.fillText(f.emoji,cx,cy+CELL*0.03);
-      }
+  for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
+    const c=grid[y][x];if(!c)continue;
+    const f=FRUITS[c.idx];
+    const cx=OX+x*CELL+CELL/2,cy=OY+y*CELL+CELL/2;
+    const age=Math.min(1,(now-c.born)/250);
+    const r=CELL*0.42*age;
+    ctx.shadowColor=f.color;ctx.shadowBlur=12;
+    ctx.fillStyle=f.color;
+    ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.fillStyle='rgba(255,255,255,.25)';
+    ctx.beginPath();ctx.arc(cx-r*0.3,cy-r*0.3,r*0.35,0,Math.PI*2);ctx.fill();
+    if(age>0.4){
+      ctx.font=(CELL*0.62)+'px serif';
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(f.emoji,cx,cy+CELL*0.03);
     }
   }
-  // Drop indicator
   if(dropCol>=0&&running){
     const cx=OX+dropCol*CELL+CELL/2;
-    ctx.strokeStyle='rgba(255,213,74,.5)';ctx.lineWidth=2;
-    ctx.setLineDash([4,4]);
-    ctx.beginPath();ctx.moveTo(cx,OY);ctx.lineTo(cx,OY+ROWS*CELL);ctx.stroke();
+    ctx.strokeStyle='rgba(126,232,176,.5)';ctx.lineWidth=2;ctx.setLineDash([4,4]);
+    ctx.beginPath();ctx.moveTo(cx,OY);ctx.lineTo(cx,OY+rows*CELL);ctx.stroke();
     ctx.setLineDash([]);
   }
 }
-function loop(t){draw();requestAnimationFrame(loop);}
-function colFromX(px){
-  const rel=px-OX;
-  const col=Math.floor(rel/CELL);
-  if(col<0||col>=COLS)return -1;
-  return col;
+function loop(){draw();requestAnimationFrame(loop);}
+function colFromX(px){const c=Math.floor((px-OX)/CELL);return(c<0||c>=cols)?-1:c;}
+function tapAt(cx,cy){
+  const r=cvs.getBoundingClientRect();
+  const px=(cx-r.left)*(W/r.width);
+  const col=colFromX(px);
+  if(col>=0){dropCol=col;dropFruit(col);dropCol=-1;}
 }
-let tx=0,ty=0,tstart=0;
-cvs.addEventListener('touchstart',e=>{
-  const t=e.touches[0];
-  tx=t.clientX;ty=t.clientY;tstart=performance.now();
-  const r=cvs.getBoundingClientRect();
-  dropCol=colFromX((t.clientX-r.left)*(W/r.width));
-},{passive:true});
-cvs.addEventListener('touchmove',e=>{
-  const t=e.touches[0];
-  const r=cvs.getBoundingClientRect();
-  dropCol=colFromX((t.clientX-r.left)*(W/r.width));
-},{passive:true});
-cvs.addEventListener('touchend',e=>{
-  if(dropCol>=0)dropFruit(dropCol);
-  dropCol=-1;
-},{passive:true});
-cvs.addEventListener('mousedown',e=>{
-  const r=cvs.getBoundingClientRect();
-  dropCol=colFromX((e.clientX-r.left)*(W/r.width));
-});
-cvs.addEventListener('mousemove',e=>{
-  const r=cvs.getBoundingClientRect();
-  dropCol=colFromX((e.clientX-r.left)*(W/r.width));
-});
-cvs.addEventListener('mouseup',()=>{
-  if(dropCol>=0)dropFruit(dropCol);
-  dropCol=-1;
-});
+cvs.addEventListener('touchstart',e=>{e.preventDefault();tapAt(e.touches[0].clientX,e.touches[0].clientY);},{passive:false});
+cvs.addEventListener('mousedown',e=>tapAt(e.clientX,e.clientY));
 document.addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
   if(k==='arrowleft'||k==='a'||k==='ф'){
-    e.preventDefault();
-    if(dropCol<0)dropCol=Math.floor(COLS/2);
-    else dropCol=Math.max(0,dropCol-1);
+    e.preventDefault();if(dropCol<0)dropCol=Math.floor(cols/2);else dropCol=Math.max(0,dropCol-1);
   } else if(k==='arrowright'||k==='d'||k==='в'){
-    e.preventDefault();
-    if(dropCol<0)dropCol=Math.floor(COLS/2);
-    else dropCol=Math.min(COLS-1,dropCol+1);
-  } else if(k===' '||k==='enter'||k==='arrowdown'||k==='s'||k==='ы'){
-    e.preventDefault();
-    if(dropCol<0)dropCol=Math.floor(COLS/2);
+    e.preventDefault();if(dropCol<0)dropCol=Math.floor(cols/2);else dropCol=Math.min(cols-1,dropCol+1);
+  } else if(k==='arrowdown'||k==='s'||k==='ы'||k===' '||k==='enter'){
+    e.preventDefault();if(dropCol<0)dropCol=Math.floor(cols/2);
     dropFruit(dropCol);dropCol=-1;
   }
 });
-document.querySelectorAll('.dpad button').forEach(b=>{
-  b.addEventListener('click',()=>{
-    const d=b.dataset.dir;
-    if(d==='left'){
-      if(dropCol<0)dropCol=Math.floor(COLS/2);
-      else dropCol=Math.max(0,dropCol-1);
-    } else if(d==='right'){
-      if(dropCol<0)dropCol=Math.floor(COLS/2);
-      else dropCol=Math.min(COLS-1,dropCol+1);
-    } else if(d==='down'){
-      if(dropCol<0)dropCol=Math.floor(COLS/2);
-      dropFruit(dropCol);dropCol=-1;
-    }
-  });
-});
+document.querySelectorAll('.dpad button').forEach(b=>b.addEventListener('click',()=>{
+  const d=b.dataset.dir;
+  if(d==='left'){if(dropCol<0)dropCol=Math.floor(cols/2);else dropCol=Math.max(0,dropCol-1);}
+  else if(d==='right'){if(dropCol<0)dropCol=Math.floor(cols/2);else dropCol=Math.min(cols-1,dropCol+1);}
+  else if(d==='down'){if(dropCol<0)dropCol=Math.floor(cols/2);dropFruit(dropCol);dropCol=-1;}
+}));
 window.addEventListener('message',e=>{
   const d=e.data;if(!d||d.type!=='input')return;
-  if(d.act==='left'){
-    if(dropCol<0)dropCol=Math.floor(COLS/2);
-    else dropCol=Math.max(0,dropCol-1);
-  } else if(d.act==='right'){
-    if(dropCol<0)dropCol=Math.floor(COLS/2);
-    else dropCol=Math.min(COLS-1,dropCol+1);
-  } else if(d.act==='down'||d.act==='ok'||d.act==='a'){
-    if(dropCol<0)dropCol=Math.floor(COLS/2);
-    dropFruit(dropCol);dropCol=-1;
-  } else if(d.act==='back'||d.act==='menu'){
-    window.parent.postMessage({type:'exit'},'*');
-  }
+  if(d.act==='left'){if(dropCol<0)dropCol=Math.floor(cols/2);else dropCol=Math.max(0,dropCol-1);}
+  else if(d.act==='right'){if(dropCol<0)dropCol=Math.floor(cols/2);else dropCol=Math.min(cols-1,dropCol+1);}
+  else if(d.act==='down'||d.act==='ok'||d.act==='a'){if(dropCol<0)dropCol=Math.floor(cols/2);dropFruit(dropCol);dropCol=-1;}
+  else if(d.act==='back'||d.act==='menu')window.parent.postMessage({type:'exit'},'*');
 });
-document.getElementById('bNew').addEventListener('click',init);
-document.getElementById('ovB').addEventListener('click',init);
+document.getElementById('bNew').addEventListener('click',()=>initLevel(1));
+document.getElementById('ovB').addEventListener('click',()=>initLevel(1));
 document.getElementById('bExit').addEventListener('click',()=>window.parent.postMessage({type:'exit'},'*'));
 document.body.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
-init();
+initLevel(1);
 requestAnimationFrame(loop);
 })();
 </script>

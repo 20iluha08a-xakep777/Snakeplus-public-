@@ -8,5 +8,20 @@
     "reward": { "type": "coins", "amount": 100 },
     "expires": 0,
     "maxUses": 0
+  },
+  "SNAKE-2026": {
+    "reward": { "type": "coins", "amount": 500 },
+    "expires": 0,
+    "maxUses": 0
+  },
+  "VK-BONUS": {
+    "reward": { "type": "coins", "amount": 300 },
+    "expires": 0,
+    "maxUses": 0
+  },
+  "GOLD-GIFT": {
+    "reward": { "type": "skin", "id": "gold" },
+    "expires": 0,
+    "maxUses": 100
   }
 }

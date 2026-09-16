@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Snake+ Cloud Test</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:#0d1526;color:#e8eefc;min-height:100dvh;padding:16px;line-height:1.5}
+h1{font-size:18px;margin-bottom:4px;color:#7ee8b0}
+.sub{font-size:11px;color:rgba(200,220,255,.5);margin-bottom:16px}
+button{display:block;width:100%;padding:14px;margin-bottom:8px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;border:2px solid #7ee8b0;background:linear-gradient(180deg,#8ff5bd,#48c98a);color:#06210f}
+button.ghost{background:transparent;color:#7ee8b0;border-color:rgba(126,232,176,.3)}
+button:active{transform:scale(.98)}
+button:disabled{opacity:.5;cursor:default}
+.log{background:#000;border:1px solid #2a3a5c;border-radius:8px;padding:12px;font-family:'Courier New',monospace;font-size:11px;line-height:1.6;max-height:60vh;overflow-y:auto;margin-top:12px;white-space:pre-wrap;word-break:break-word}
+.log .ok{color:#7ee8b0}
+.log .err{color:#ff5757}
+.log .info{color:#66d9ff}
+.log .warn{color:#ffd54a}
+.state{padding:8px 12px;background:rgba(126,232,176,.1);border:1px solid #7ee8b0;border-radius:8px;font-size:12px;margin-bottom:12px}
+.state b{color:#7ee8b0}
+</style>
+</head>
+<body>
+
+<h1>🧪 Snake+ Cloud Test</h1>
+<div class="sub">Проверка Supabase перед интеграцией</div>
+
+<div class="state" id="stateBox">
+  Статус: <b id="userState">не вошёл</b>
+</div>
+
+<button id="btnInit">1️⃣ Проверить соединение</button>
+<button id="btnAnon">2️⃣ Войти анонимно</button>
+<button id="btnProfile">3️⃣ Загрузить профиль</button>
+<button id="btnPush">4️⃣ Синхронизировать (push)</button>
+<button id="btnPull">5️⃣ Скачать с сервера (pull)</button>
+<button id="btnSignOut" class="ghost">6️⃣ Выйти</button>
+<button id="btnClearLog" class="ghost">Очистить лог</button>
+
+<div class="log" id="log">Ожидание…</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="snake-sync.js"></script>
+<script>
+const logEl = document.getElementById('log');
+const stateEl = document.getElementById('userState');
+
+function log(msg, cls){
+  const line = document.createElement('div');
+  if(cls) line.className = cls;
+  const time = new Date().toLocaleTimeString('ru-RU');
+  line.textContent = '[' + time + '] ' + msg;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function clearLog(){ logEl.innerHTML = ''; }
+function refreshState(){
+  const u = Cloud.getUser();
+  const p = Cloud.getProfile();
+  if(u){
+    stateEl.textContent = (p?.display_name || 'Игрок') + ' · ID ' + (p?.snake_id || '…') + ' · ' + u.id.slice(0,8);
+  } else {
+    stateEl.textContent = 'не вошёл';
+  }
+}
+
+document.getElementById('btnClearLog').addEventListener('click', clearLog);
+
+document.getElementById('btnInit').addEventListener('click', async () => {
+  log('▶ init()…', 'info');
+  try{
+    const u = await Cloud.init();
+    log('✓ init OK. User: ' + (u ? u.id : 'null'), 'ok');
+    refreshState();
+  }catch(e){
+    log('✗ init FAIL: ' + (e.message||e), 'err');
+  }
+});
+
+document.getElementById('btnAnon').addEventListener('click', async () => {
+  log('▶ signInAnonymously()…', 'info');
+  try{
+    const u = await Cloud.signInAnonymously();
+    log('✓ Вход OK. User ID: ' + u.id, 'ok');
+    log('   is_anonymous: ' + u.is_anonymous, 'info');
+    refreshState();
+    // Дать БД 1 секунду создать профиль через триггер
+    log('   Ждём триггер handle_new_user (1с)…', 'info');
+    await new Promise(r => setTimeout(r, 1000));
+    await Cloud.loadProfile();
+    const p = Cloud.getProfile();
+    if(p){
+      log('✓ Профиль создан: ID=' + p.snake_id + ' name=' + (p.display_name||'—'), 'ok');
+    } else {
+      log('✗ Профиль НЕ создан — проверь триггер handle_new_user', 'err');
+    }
+    refreshState();
+  }catch(e){
+    log('✗ signIn FAIL: ' + (e.message||e), 'err');
+    log('   Код: ' + (e.code||'—') + ' · status: ' + (e.status||'—'), 'err');
+    if(String(e.message).includes('Anonymous')){
+      log('💡 Включи Auth → Providers → Anonymous Sign-Ins', 'warn');
+    }
+  }
+});
+
+document.getElementById('btnProfile').addEventListener('click', async () => {
+  log('▶ loadProfile()…', 'info');
+  try{
+    const p = await Cloud.loadProfile();
+    if(p){
+      log('✓ Профиль: ' + JSON.stringify(p, null, 2), 'ok');
+    } else {
+      log('✗ Профиль не найден. Триггер не создал запись?', 'err');
+    }
+    refreshState();
+  }catch(e){
+    log('✗ loadProfile FAIL: ' + (e.message||e), 'err');
+  }
+});
+
+document.getElementById('btnPush').addEventListener('click', async () => {
+  log('▶ push()…', 'info');
+  // Положим тестовое значение, чтобы было что-то синкать
+  try{ localStorage.setItem('snake_coins_v240', '1234'); }catch(e){}
+  try{ localStorage.setItem('snake_level_v240', '5'); }catch(e){}
+  try{
+    const r = await Cloud.push();
+    if(r.ok){
+      log('✓ push OK', 'ok');
+      log('   Монеты: ' + (r.merged['snake_coins_v240']||0), 'ok');
+      log('   Уровень: ' + (r.merged['snake_level_v240']||0), 'ok');
+      log('   Скины: ' + JSON.stringify(r.merged['snake_owned_skins_v240']||[]), 'ok');
+    } else {
+      log('✗ push FAIL: ' + r.reason, 'err');
+      if(String(r.reason).includes('relation')||String(r.reason).includes('does not exist')){
+        log('💡 Таблица progress не создана. Выполни SQL.', 'warn');
+      }
+      if(String(r.reason).includes('row-level security')){
+        log('💡 RLS блокирует. Проверь политики на progress.', 'warn');
+      }
+    }
+  }catch(e){
+    log('✗ push THROW: ' + (e.message||e), 'err');
+  }
+});
+
+document.getElementById('btnPull').addEventListener('click', async () => {
+  log('▶ pull()…', 'info');
+  try{
+    const d = await Cloud.pull();
+    if(d){
+      log('✓ pull OK. Данные: ' + JSON.stringify(d, null, 2).slice(0, 500) + (JSON.stringify(d).length > 500 ? '…' : ''), 'ok');
+    } else {
+      log('✗ pull вернул null (нет данных или не вошёл)', 'err');
+    }
+  }catch(e){
+    log('✗ pull FAIL: ' + (e.message||e), 'err');
+  }
+});
+
+document.getElementById('btnSignOut').addEventListener('click', async () => {
+  log('▶ signOut()…', 'info');
+  try{
+    await Cloud.signOut();
+    log('✓ Вышли', 'ok');
+    refreshState();
+  }catch(e){
+    log('✗ signOut FAIL: ' + (e.message||e), 'err');
+  }
+});
+
+// Автоинициализация при загрузке
+window.addEventListener('load', async () => {
+  log('🧪 Snake+ Cloud Test старт', 'info');
+  log('URL: ' + Cloud.sb.supabaseUrl, 'info');
+  try{
+    const u = await Cloud.init();
+    log('✓ init OK' + (u ? ' · уже был вход: ' + u.id.slice(0,8) : ''), 'ok');
+    refreshState();
+  }catch(e){
+    log('✗ init FAIL: ' + (e.message||e), 'err');
+  }
+});
+</script>
+</body>
+</html>

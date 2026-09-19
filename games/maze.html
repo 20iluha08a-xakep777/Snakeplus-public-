@@ -1,210 +1,29 @@
 <!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Лабиринт</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
-body{background:#0d1526;color:#e8eefc;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;padding:10px;user-select:none;-webkit-tap-highlight-color:transparent;overflow:hidden;gap:8px}
-.title{font-size:11px;letter-spacing:4px;color:rgba(200,220,255,.5);text-transform:uppercase}
-.hud{width:min(94vw,360px);display:flex;justify-content:space-between;font-size:10px;letter-spacing:1px;color:#9fb0d0}
-.hud b{color:#7ee8b0;font-size:13px;margin-left:4px}
-canvas{width:min(94vw,360px);height:min(94vw,360px);border-radius:12px;background:#050a14;box-shadow:0 0 0 2px #2a3a5c,0 0 30px rgba(126,232,176,.15);touch-action:none;display:block}
-.btns{display:flex;gap:8px}
-button{font:inherit;font-size:12px;font-weight:700;padding:8px 14px;border-radius:8px;border:2px solid #7ee8b0;background:transparent;color:#7ee8b0;cursor:pointer;letter-spacing:1px}
-button:active{background:#7ee8b0;color:#06210f}
-.dpad{display:grid;grid-template-columns:repeat(3,44px);grid-template-rows:repeat(2,44px);gap:4px}
-.dpad button{width:44px;height:44px;padding:0;font-size:16px;border-radius:10px;border:2px solid #2a3a5c;background:linear-gradient(180deg,#2a3a5c,#1a2540);color:#7ee8b0;display:flex;align-items:center;justify-content:center}
-.dpad .sp{visibility:hidden}
-.overlay{position:fixed;inset:0;background:rgba(5,10,20,.94);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:10;padding:24px;text-align:center}
-.overlay.show{display:flex}
-.overlay h2{color:#7ee8b0;font-size:22px;letter-spacing:3px}
-.overlay p{color:#9fb0d0;font-size:13px;line-height:1.7}
-.overlay b{color:#fff;font-size:16px}
-</style>
-</head>
-<body>
-<div class="title">Лабиринт</div>
-<div class="hud"><span>УР.<b id="lvl">1</b></span><span>ШАГИ<b id="steps">0</b></span><span>СЧЁТ<b id="score">0</b></span></div>
-<canvas id="c" width="360" height="360"></canvas>
-<div class="btns"><button id="bNew">Заново</button><button id="bExit">← Назад</button></div>
-<div class="dpad">
-<div class="sp"></div><button data-dir="up">▲</button><div class="sp"></div>
-<button data-dir="left">◀</button><button data-dir="down">▼</button><button data-dir="right">▶</button>
-</div>
-<div class="overlay" id="ov"><h2 id="ovT">Игра окончена</h2><p id="ovP"></p><button id="ovB">Ещё раз</button></div>
-<script>
-(function(){
-'use strict';
-const cvs=document.getElementById('c'),ctx=cvs.getContext('2d');
-const W=360,H=360;
-const SIZES=[9,11,13,15,17,19,21,23];
-let maze,cols,rows,CELL,OX,OY,head,apple,dir,nextDir,running,over,steps,score,level,acc,last;
-function genMaze(c,r){
-  const m=[];
-  for(let y=0;y<r;y++){m[y]=[];for(let x=0;x<c;x++)m[y][x]=1;}
-  m[1][1]=0;
-  const stack=[[1,1]];
-  const dirs=[[0,-2],[0,2],[-2,0],[2,0]];
-  while(stack.length){
-    const [x,y]=stack[stack.length-1];
-    const n=[];
-    for(const [dx,dy] of dirs){
-      const nx=x+dx,ny=y+dy;
-      if(nx>0&&nx<c-1&&ny>0&&ny<r-1&&m[ny][nx]===1)n.push([nx,ny,x+dx/2,y+dy/2]);
-    }
-    if(!n.length)stack.pop();
-    else{const [nx,ny,wx,wy]=n[Math.floor(Math.random()*n.length)];m[wy][wx]=0;m[ny][nx]=0;stack.push([nx,ny]);}
-  }
-  const loops=Math.floor(c*r*0.05);
-  for(let i=0;i<loops;i++){
-    const x=1+Math.floor(Math.random()*(c-2));
-    const y=1+Math.floor(Math.random()*(r-2));
-    if(m[y][x]===1){
-      let w=0;
-      if(m[y-1][x]===1)w++;if(m[y+1][x]===1)w++;
-      if(m[y][x-1]===1)w++;if(m[y][x+1]===1)w++;
-      if(w<=2)m[y][x]=0;
-    }
-  }
-  return m;
-}
-function initLevel(lvl){
-  level=lvl;
-  const size=SIZES[Math.min(lvl-1,SIZES.length-1)];
-  cols=size;rows=size;
-  maze=genMaze(cols,rows);
-  CELL=Math.min(W/cols,H/rows);
-  OX=(W-cols*CELL)/2;OY=(H-rows*CELL)/2;
-  head={x:1,y:1};
-  apple={x:cols-2,y:rows-2};
-  maze[apple.y][apple.x]=0;
-  dir={x:0,y:0};nextDir={x:0,y:0};
-  running=true;over=false;steps=0;acc=0;last=0;
-  updateHUD();
-  document.getElementById('ov').classList.remove('show');
-}
-function updateHUD(){
-  document.getElementById('lvl').textContent=level;
-  document.getElementById('steps').textContent=steps;
-  document.getElementById('score').textContent=score;
-}
-function isWall(x,y){if(x<0||x>=cols||y<0||y>=rows)return true;return maze[y][x]===1;}
-function step(){
-  if(nextDir.x||nextDir.y){
-    const nx=head.x+nextDir.x,ny=head.y+nextDir.y;
-    if(!isWall(nx,ny)){dir=nextDir;nextDir={x:0,y:0};}
-  }
-  if(dir.x||dir.y){
-    const nx=head.x+dir.x,ny=head.y+dir.y;
-    if(!isWall(nx,ny)){head.x=nx;head.y=ny;steps++;updateHUD();}
-    else dir={x:0,y:0};
-  }
-  if(head.x===apple.x&&head.y===apple.y){
-    const bonus=Math.max(10,200-steps*2);
-    score+=bonus;
-    updateHUD();
-    if(level<SIZES.length){
-      running=false;
-      document.getElementById('ovT').textContent='🏆 Уровень '+level+'!';
-      document.getElementById('ovP').innerHTML='Бонус: <b>+'+bonus+'</b><br>Шагов: <b>'+steps+'</b><br>Размер следующего: '+(SIZES[level])+'×'+(SIZES[level]);
-      document.getElementById('ov').classList.add('show');
-      window.parent.postMessage({type:'addCoins',amount:Math.max(3,Math.floor(bonus/10))},'*');
-      setTimeout(()=>initLevel(level+1),1600);
-    } else {
-      running=false;over=true;
-      document.getElementById('ovT').textContent='🏆 Все 8 уровней!';
-      document.getElementById('ovP').innerHTML='Счёт: <b>'+score+'</b><br>Ты — мастер лабиринта!';
-      document.getElementById('ov').classList.add('show');
-      window.parent.postMessage({type:'addCoins',amount:200},'*');
-    }
-  }
-}
-function draw(){
-  ctx.fillStyle='#050a14';ctx.fillRect(0,0,W,H);
-  for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
-    if(maze[y][x]===1){
-      const px=OX+x*CELL,py=OY+y*CELL;
-      ctx.fillStyle='#1a3a6a';
-      ctx.fillRect(px,py,CELL,CELL);
-      ctx.strokeStyle='#3a6ac0';ctx.lineWidth=1;
-      ctx.strokeRect(px+0.5,py+0.5,CELL-1,CELL-1);
-    }
-  }
-  const ax=OX+apple.x*CELL+CELL/2,ay=OY+apple.y*CELL+CELL/2;
-  ctx.shadowColor='#ff5757';ctx.shadowBlur=14;
-  ctx.fillStyle='#ff5757';
-  ctx.beginPath();ctx.arc(ax,ay,CELL*0.38,0,Math.PI*2);ctx.fill();
-  ctx.shadowBlur=0;
-  ctx.fillStyle='#4a8a2a';
-  ctx.beginPath();ctx.ellipse(ax+CELL*0.08,ay-CELL*0.32,CELL*0.14,CELL*0.07,-0.5,0,Math.PI*2);ctx.fill();
-  const hx=OX+head.x*CELL+CELL/2,hy=OY+head.y*CELL+CELL/2;
-  ctx.shadowColor='#7ee8b0';ctx.shadowBlur=14;
-  ctx.fillStyle='#a8ffd0';
-  const r=CELL*0.42;
-  ctx.beginPath();
-  if(ctx.roundRect)ctx.roundRect(hx-r,hy-r,r*2,r*2,r*0.55);
-  else ctx.rect(hx-r,hy-r,r*2,r*2);
-  ctx.fill();
-  ctx.shadowBlur=0;
-  const dx=dir.x,dy=dir.y,px=-dy,py=dx;
-  const oF=CELL*0.14,oS=CELL*0.17,eR=CELL*0.085;
-  ctx.fillStyle='#000';
-  if(dx||dy){
-    ctx.beginPath();ctx.arc(hx+dx*oF+px*oS,hy+dy*oF+py*oS,eR,0,Math.PI*2);ctx.fill();
-    ctx.beginPath();ctx.arc(hx+dx*oF-px*oS,hy+dy*oF-py*oS,eR,0,Math.PI*2);ctx.fill();
-  } else {
-    ctx.beginPath();ctx.arc(hx-CELL*0.14,hy,eR,0,Math.PI*2);ctx.fill();
-    ctx.beginPath();ctx.arc(hx+CELL*0.14,hy,eR,0,Math.PI*2);ctx.fill();
-  }
-}
-function loop(t){
-  const dt=Math.min(50,t-(last||t));last=t;
-  if(running){
-    acc+=dt;
-    const tickMs=Math.max(90,160-level*8);
-    while(acc>=tickMs){acc-=tickMs;step();if(!running)break;}
-  }
-  draw();
-  requestAnimationFrame(loop);
-}
-function setDir(x,y){if(!running)return;nextDir={x,y};}
-document.querySelectorAll('.dpad button').forEach(b=>b.addEventListener('click',()=>{
-  const d=b.dataset.dir;
-  if(d==='up')setDir(0,-1);else if(d==='down')setDir(0,1);
-  else if(d==='left')setDir(-1,0);else if(d==='right')setDir(1,0);
-}));
-let tx=0,ty=0;
-cvs.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;},{passive:true});
-cvs.addEventListener('touchend',e=>{
-  const dx=e.changedTouches[0].clientX-tx,dy=e.changedTouches[0].clientY-ty;
-  if(Math.hypot(dx,dy)<18)return;
-  if(Math.abs(dx)>Math.abs(dy))setDir(dx>0?1:-1,0);else setDir(0,dy>0?1:-1);
-},{passive:true});
-document.addEventListener('keydown',e=>{
-  const k=e.key.toLowerCase();
-  if(k==='arrowup'||k==='w'||k==='ц'){e.preventDefault();setDir(0,-1);}
-  else if(k==='arrowdown'||k==='s'||k==='ы'){e.preventDefault();setDir(0,1);}
-  else if(k==='arrowleft'||k==='a'||k==='ф'){e.preventDefault();setDir(-1,0);}
-  else if(k==='arrowright'||k==='d'||k==='в'){e.preventDefault();setDir(1,0);}
-});
-window.addEventListener('message',e=>{
-  const d=e.data;if(!d||d.type!=='input')return;
-  if(d.act==='up')setDir(0,-1);else if(d.act==='down')setDir(0,1);
-  else if(d.act==='left')setDir(-1,0);else if(d.act==='right')setDir(1,0);
-  else if(d.act==='back'||d.act==='menu')window.parent.postMessage({type:'exit'},'*');
-  else if(d.act==='ok'&&over){score=0;initLevel(1);}
-});
-document.getElementById('bNew').addEventListener('click',()=>{score=0;initLevel(1);});
-document.getElementById('ovB').addEventListener('click',()=>{score=0;initLevel(1);});
-document.getElementById('bExit').addEventListener('click',()=>window.parent.postMessage({type:'exit'},'*'));
-document.body.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
-score=0;
-initLevel(1);
-requestAnimationFrame(loop);
-})();
-</script>
-</body>
-</html>
+<html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"><title>Лабиринт</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}html,body{height:100%;overflow:hidden}body{background:#0d1526;color:#e8eefc;font-family:system-ui,-apple-system,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;user-select:none;padding:8px;gap:8px}.hud{display:flex;gap:14px;font-size:11px;letter-spacing:1px;color:rgba(200,220,255,.6);text-transform:uppercase}.hud b{color:#7ee8b0;font-size:13px;margin-left:4px}.wrap{position:relative;display:flex}.msg{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(5,10,20,.94);border-radius:10px;gap:12px;padding:20px;text-align:center;z-index:10}.msg.show{display:flex}.msg h2{color:#7ee8b0;font-size:20px}.msg p{font-size:12px;color:rgba(200,220,255,.75);line-height:1.6}.msg button{font:inherit;font-size:13px;font-weight:700;padding:10px 22px;border:2px solid #7ee8b0;border-radius:8px;background:#7ee8b0;color:#06210f;cursor:pointer}.pad{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:6px;max-width:180px;width:58vw}.pad button{aspect-ratio:1;font:inherit;border:1.5px solid #2a3a5c;border-radius:8px;color:#cfe0ff;font-size:16px;font-weight:700;background:linear-gradient(180deg,#2a3a5c,#1a2540);cursor:pointer}.pad button:active{color:#7ee8b0;border-color:#7ee8b0}.pad .ok{color:#06210f;border-color:#7ee8b0;background:linear-gradient(180deg,#8ff5bd,#48c98a)}</style></head><body>
+<div class="hud"><span>Ур.<b id="lv">1</b></span><span>Шаги<b id="mv">0</b></span><span>Размер<b id="sz">9×9</b></span><span>💰<b id="coins">0</b></span></div>
+<div class="wrap"><canvas id="c" width="360" height="360"></canvas><div class="msg" id="msg"></div></div>
+<div class="pad" id="pad"></div>
+<script>(function(){const $=id=>document.getElementById(id),c=$('c'),ctx=c.getContext('2d');
+let grid,size,CELL,px,py,endX,endY,path,moves,level,alive;
+let totalCoins=Number(localStorage.getItem('maze_coins')||0);
+function gen(sz){
+size=sz;grid=Array.from({length:sz},()=>Array(sz).fill(1));
+function carve(x,y){grid[y][x]=0;const dirs=[[2,0],[-2,0],[0,2],[0,-2]].sort(()=>Math.random()-0.5);for(const d of dirs){const nx=x+d[0],ny=y+d[1];if(nx>0&&ny>0&&nx<sz-1&&ny<sz-1&&grid[ny][nx]===1){grid[y+d[1]/2][x+d[0]/2]=0;carve(nx,ny);}}}
+carve(1,1);grid[1][1]=2;grid[sz-2][sz-2]=3;px=1;py=1;endX=sz-2;endY=sz-2;}
+function init(){const sz=7+Math.min((level-1)*2,30);gen(sz%2?sz:sz+1);moves=0;alive=true;CELL=c.width/size;render();}
+function show(t,p,b,n){const m=$('msg');m.innerHTML='<h2>'+t+'</h2><p>'+p+'</p>';m.classList.add('show');const bt=document.createElement('button');bt.textContent=b;bt.onclick=()=>{m.classList.remove('show');n();};m.appendChild(bt);}
+function move(dx,dy){if(!alive)return;const nx=px+dx,ny=py+dy;if(nx<0||ny<0||nx>=size||ny>=size)return;if(grid[ny][nx]===1)return;px=nx;py=ny;moves++;if(px===endX&&py===endY){const r=25+level*8;totalCoins+=r;localStorage.setItem('maze_coins',totalCoins);try{window.parent.postMessage({type:'addCoins',amount:r},'*');}catch(e){}level++;localStorage.setItem('maze_lv',level);show('🎉 Выход найден!','Шагов: '+moves+'<br>+'+r+'💰','Дальше',init);}render();}
+function render(){
+ctx.fillStyle='#050a14';ctx.fillRect(0,0,c.width,c.height);
+for(let y=0;y<size;y++)for(let x=0;x<size;x++){const v=grid[y][x];const rx=x*CELL,ry=y*CELL;
+if(v===1){ctx.fillStyle='#1a2540';ctx.fillRect(rx,ry,CELL,CELL);}
+else if(v===2){ctx.fillStyle='#7ee8b0';ctx.beginPath();ctx.arc(rx+CELL/2,ry+CELL/2,CELL*0.35,0,7);ctx.fill();}
+else if(v===3){ctx.fillStyle='#ffd54a';ctx.beginPath();ctx.arc(rx+CELL/2,ry+CELL/2,CELL*0.4,0,7);ctx.fill();ctx.fillStyle='#06210f';ctx.font='bold '+(CELL*0.5)+'px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('★',rx+CELL/2,ry+CELL/2+1);}}
+ctx.fillStyle='#ffffff';ctx.beginPath();ctx.arc(px*CELL+CELL/2,py*CELL+CELL/2,CELL*0.32,0,7);ctx.fill();ctx.fillStyle='#7ee8b0';ctx.beginPath();ctx.arc(px*CELL+CELL/2,py*CELL+CELL/2,CELL*0.22,0,7);ctx.fill();
+$('lv').textContent=level;$('mv').textContent=moves;$('sz').textContent=size+'×'+size;$('coins').textContent=totalCoins;}
+const pad=$('pad');[{},{l:'▲',d:[0,-1]},{},{l:'◀',d:[-1,0]},{l:'OK',ok:1},{l:'▶',d:[1,0]},{},{l:'▼',d:[0,1]},{}].forEach(it=>{const b=document.createElement('button');b.textContent=it.l||'';if(it.ok)b.className='ok';b.addEventListener('click',()=>{if(it.ok){if(px===endX&&py===endY)init();}else if(it.d)move(it.d[0],it.d[1]);});pad.appendChild(b);});
+document.addEventListener('keydown',e=>{const m={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1],a:[-1,0],d:[1,0],w:[0,-1],s:[0,1]}[e.key];if(m){e.preventDefault();move(m[0],m[1]);}});
+let sx=0,sy=0;c.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY;},{passive:true});c.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;if(Math.hypot(dx,dy)<20)return;if(Math.abs(dx)>Math.abs(dy))move(dx>0?1:-1,0);else move(0,dy>0?1:-1);},{passive:true});
+window.addEventListener('message',e=>{const d=e.data;if(!d||typeof d!=='object')return;if(d.type==='input'){const m={left:[-1,0],right:[1,0],up:[0,-1],down:[0,1]};if(m[d.act])move(m[d.act][0],m[d.act][1]);else if(d.act==='back')try{window.parent.postMessage({type:'exit'},'*');}catch(e){}}});
+level=Number(localStorage.getItem('maze_lv')||1);init();})();</script></body></html>

@@ -1,21 +1,21 @@
 {
-  "version": 3,
-  "updated": "2026-09-15",
+  "version": 2,
   "categories": [
-    { "id": "arcade", "name": "Аркады" },
-    { "id": "puzzle", "name": "Головоломки" },
-    { "id": "snake", "name": "Змейка" }
+    {"id": "arcade", "name": "Аркады"},
+    {"id": "puzzle", "name": "Головоломки"},
+    {"id": "action", "name": "Экшн"},
+    {"id": "memory", "name": "Память"}
   ],
   "games": [
-    { "id": "snake2048", "name": "Snake-2048", "icon": "🐍", "price": 3000, "rating": 4.8, "size": "12 КБ", "ver": "2.0", "desc": "Классический 2048. 8 уровней: от 32 до 4096", "category": "puzzle", "source": "external", "file": "games/snake2048.html", "enabled": true },
-    { "id": "pacman", "name": "Pac-Man", "icon": "🎯", "price": 5000, "rating": 4.9, "size": "16 КБ", "ver": "2.0", "desc": "5 уровней с растущей сложностью", "category": "arcade", "source": "external", "file": "games/pacman.html", "enabled": true },
-    { "id": "maze", "name": "Лабиринт", "icon": "🗺️", "price": 4000, "rating": 4.7, "size": "10 КБ", "ver": "2.0", "desc": "8 уровней процедурной генерации. Голова-змейка ищет яблоко", "category": "snake", "source": "external", "file": "games/maze.html", "enabled": true },
-    { "id": "applemerge", "name": "Apple Merge", "icon": "🍒", "price": 6000, "rating": 4.8, "size": "12 КБ", "ver": "2.0", "desc": "7 фруктов, 6 уровней. Собери 👑", "category": "puzzle", "source": "external", "file": "games/applemerge.html", "enabled": true },
-    { "id": "snaketetris", "name": "Snake Tetris", "icon": "🧱", "price": 8000, "rating": 4.9, "size": "13 КБ", "ver": "2.0", "desc": "Тетрис + змейка-ИИ. Уровни от 0.5 до 2.5", "category": "puzzle", "source": "external", "file": "games/snaketetris.html", "enabled": true },
-    { "id": "snakearkanoid", "name": "Snake Arkanoid", "icon": "🍎", "price": 9000, "rating": 4.8, "size": "13 КБ", "ver": "2.0", "desc": "Змейка-платформа. 6 уровней", "category": "arcade", "source": "external", "file": "games/snakearkanoid.html", "enabled": true },
-    { "id": "snakeblocks", "name": "Snake Blocks", "icon": "🟩", "price": 7000, "rating": 4.7, "size": "10 КБ", "ver": "2.0", "desc": "Собери блоки змейкой. 4 режима", "category": "snake", "source": "external", "file": "games/snakeblocks.html", "enabled": true }
-  ],
-  "apps": [
-    { "id": "flashlight", "name": "Фонарик", "icon": "🔦", "price": 0, "category": "tools", "source": "internal", "enabled": true }
+    {"id":"snake2048","icon":"🐍","name":"Snake-2048","price":800,"rating":4.8,"size":"12 КБ","ver":"2.0","desc":"Классический 2048. 20 уровней","source":"external","file":"games/snake2048.html","enabled":true},
+    {"id":"snakesimon","icon":"🔔","name":"Snake Simon","price":600,"rating":4.6,"size":"5 КБ","ver":"1.0","desc":"Повтори последовательность. 20 уровней","source":"external","file":"games/snakesimon.html","enabled":true},
+    {"id":"snakeblocks","icon":"🟦","name":"Snake Blocks","price":1200,"rating":4.7,"size":"9 КБ","ver":"2.0","desc":"Тетрис-пазл без гравитации. 20 уровней","source":"external","file":"games/snakeblocks.html","enabled":true},
+    {"id":"maze","icon":"🗺️","name":"Лабиринт","price":900,"rating":4.8,"size":"7 КБ","ver":"2.0","desc":"Процедурная генерация до 35×35. Свайп-бег","source":"external","file":"games/maze.html","enabled":true},
+    {"id":"applemerge","icon":"🍒","name":"Apple Merge","price":1500,"rating":4.9,"size":"10 КБ","ver":"2.0","desc":"Suika-стиль. 11 фруктов. Бомба+Shake","source":"external","file":"games/applemerge.html","enabled":true},
+    {"id":"pacman","icon":"👾","name":"Pac-Man","price":1800,"rating":4.9,"size":"10 КБ","ver":"2.0","desc":"4 призрака с разным ИИ. 20 уровней","source":"external","file":"games/pacman.html","enabled":true},
+    {"id":"snaketetris","icon":"🧱","name":"Snake Tetris","price":1500,"rating":4.9,"size":"13 КБ","ver":"2.0","desc":"Классический тетрис. 20 уровней","source":"external","file":"games/snaketetris.html","enabled":true},
+    {"id":"snakearkanoid","icon":"🍎","name":"Snake Arkanoid","price":1700,"rating":4.8,"size":"13 КБ","ver":"2.0","desc":"Арканоид с растущими уровнями","source":"external","file":"games/snakearkanoid.html","enabled":true},
+    {"id":"snaketron","icon":"💡","name":"Snake Tron","price":1400,"rating":4.8,"size":"6 КБ","ver":"1.0","desc":"Дуэль со световым следом. 20 уровней","source":"external","file":"games/snaketron.html","enabled":true},
+    {"id":"snakebomber","icon":"💣","name":"Snake Bomber","price":2000,"rating":4.9,"size":"7 КБ","ver":"1.0","desc":"Бомбермен-змейка. Враги+взрывы","source":"external","file":"games/snakebomber.html","enabled":true}
   ]
 }

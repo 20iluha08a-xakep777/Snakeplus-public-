@@ -31,7 +31,6 @@ canvas{background:#050a14;border-radius:14px;box-shadow:inset 0 0 30px rgba(0,0,
 .lv-btn.done{background:linear-gradient(180deg,rgba(126,232,176,.3),rgba(72,201,138,.15));border-color:#7ee8b0}
 .lv-btn.locked{opacity:.35;cursor:default}
 .lv-btn.current{border-color:#ffd54a;box-shadow:0 0 0 2px rgba(255,213,74,.3)}
-.lv-btn .check{position:absolute;top:2px;right:4px;font-size:11px;color:#7ee8b0}
 .toast{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-150%);background:#7ee8b0;color:#06210f;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:800;z-index:200;transition:all .3s;white-space:nowrap}
 .toast.show{transform:translateX(-50%) translateY(0)}
 </style>
@@ -42,7 +41,7 @@ canvas{background:#050a14;border-radius:14px;box-shadow:inset 0 0 30px rgba(0,0,
     <span>Ур.<b id="lv">1</b> · Очки<b id="sc">0</b> · Жизни<b id="hp">3</b></span>
     <span class="coins">💰 <span id="coins">0</span></span>
   </div>
-  <div class="stage"><canvas id="c" width="380" height="380"></canvas></div>
+  <div class="stage"><canvas id="c" width="378" height="414"></canvas></div>
   <div class="pad" id="pad"></div>
 </div>
 <div class="msg" id="msg"></div>
@@ -54,7 +53,7 @@ canvas{background:#050a14;border-radius:14px;box-shadow:inset 0 0 30px rgba(0,0,
 const $=id=>document.getElementById(id);
 const c=$('c'),ctx=c.getContext('2d');
 
-/* ============ ANTI-LAG SYSTEM ============ */
+/* ============ ANTI-LAG ============ */
 let _gen=0;
 let _timers=[];
 let _inputLocked=false;
@@ -68,20 +67,50 @@ function _clearAllTimers(){
   _timers.forEach(id=>{clearTimeout(id);clearInterval(id);});
   _timers=[];
 }
-function _lockInput(ms){
-  _inputLocked=true;
-  _safeTimeout(()=>{_inputLocked=false;},ms||400);
-}
+function _lockInput(ms){_inputLocked=true;_safeTimeout(()=>{_inputLocked=false;},ms||400);}
 
-/* ============ GAME ============ */
-const MW=15,MH=15;
-let CELL,grid,pelletsLeft,totalPellets;
+/* ============ КЛАССИЧЕСКИЙ ЛАБИРИНТ 21×23 ============ */
+// '#' стена, '.' пеллет, 'o' power pellet, ' ' пусто, '-' ворота призраков
+const MAZE=[
+"#####################",
+"#.........#.........#",
+"#.###.###.#.###.###.#",
+"#o#.....#.#.....#..o#",
+"#.#.###.#.#.###.#.#.#",
+"#...#...#...#...#...#",
+"###.#.#####.#####.#.#",
+"#.....#.......#.....#",
+"#.###.###.#.###.###.#",
+"#.....#...#...#.....#",
+"#.###.#.#.#.#.#.###.#",
+"#.....#.......#.....#",
+"###.#.#.#####.#.#.###",
+"#.....#.......#.....#",
+"#.###.#.#.#.#.#.###.#",
+"#.....#...#...#.....#",
+"#.###.###.#.###.###.#",
+"#.....#.......#.....#",
+"###.#.#####.#####.#.#",
+"#...#...#...#...#...#",
+"#.#.###.#.#.###.#.#.#",
+"#o#.....#.#.....#..o#",
+"#.###.###.#.###.###.#",
+"#.........#.........#",
+"#####################"
+];
+const MW=MAZE[0].length; // 21
+const MH=MAZE.length;    // 25
+
+let CELL=Math.floor(Math.min(c.width/MW,c.height/MH));
+let grid;
+let pelletsLeft,totalPellets;
 let pacman,ghosts,score,lives,level,alive,gameActive;
-let powerTimer,ghostTick,lastT;
+let powerTimer,powerGhostCombo,lastT;
 let totalCoins=Number(localStorage.getItem('pm_coins')||0);
 let maxLevel=Number(localStorage.getItem('pm_maxlv')||1);
 let doneLevels=(()=>{try{return JSON.parse(localStorage.getItem('pm_done')||'[]');}catch(e){return[];}})();
-let fruit=null;
+let fruit=null,fruitTimer=0;
+let pacmanStart,ghostHome;
 
 function save(){
   localStorage.setItem('pm_coins',totalCoins);
@@ -93,67 +122,6 @@ function save(){
 function postCoins(n){try{window.parent.postMessage({type:'addCoins',amount:n},'*');}catch(e){}}
 function postProgress(){try{window.parent.postMessage({type:'gameProgress',game:'pacman',level:level,coins:totalCoins,done:doneLevels},'*');}catch(e){}}
 
-/* ============ GENERATION ============ */
-function generateMap(){
-  for(let attempt=0;attempt<50;attempt++){
-    const m=Array.from({length:MH},()=>Array(MW).fill('#'));
-    for(let x=0;x<MW;x++){m[0][x]='#';m[MH-1][x]='#';}
-    for(let y=0;y<MH;y++){m[y][0]='#';m[y][MW-1]='#';}
-    const midY=Math.floor(MH/2);
-    for(let x=1;x<MW-1;x++)m[midY][x]='.';
-    const cols=[2,4,7,10,12];
-    for(const col of cols){
-      for(let y=1;y<MH-1;y++){
-        if(Math.random()<0.7)m[y][col]='.';
-      }
-    }
-    const rows=[2,4,midY,10,12];
-    for(const row of rows){
-      for(let x=1;x<MW-1;x++){
-        if(Math.random()<0.75)m[row][x]='.';
-      }
-    }
-    const sx=1,sy=midY;
-    if(m[sy][sx]==='#')m[sy][sx]='.';
-    const reached=bfsReach(m,sx,sy);
-    let reachable=0,total=0;
-    for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){
-      if(m[y][x]==='.'){total++;if(reached[y][x])reachable++;}
-    }
-    if(reachable<total*0.9)continue;
-    const corners=[[1,1],[MW-2,1],[1,MH-2],[MW-2,MH-2]];
-    for(const [cx,cy] of corners){
-      if(m[cy][cx]==='.')m[cy][cx]='o';
-    }
-    m[midY][Math.floor(MW/2)]=' ';
-    return m;
-  }
-  return fallbackMap();
-}
-function fallbackMap(){
-  const m=Array.from({length:MH},()=>Array(MW).fill('.'));
-  for(let x=0;x<MW;x++){m[0][x]='#';m[MH-1][x]='#';}
-  for(let y=0;y<MH;y++){m[y][0]='#';m[y][MW-1]='#';}
-  m[Math.floor(MH/2)][Math.floor(MW/2)]=' ';
-  return m;
-}
-function bfsReach(m,sx,sy){
-  const visited=Array.from({length:MH},()=>Array(MW).fill(false));
-  const q=[[sx,sy]];visited[sy][sx]=true;
-  while(q.length){
-    const [x,y]=q.shift();
-    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
-      const nx=x+dx,ny=y+dy;
-      if(nx<0||ny<0||nx>=MW||ny>=MH)continue;
-      if(visited[ny][nx])continue;
-      if(m[ny][nx]==='#')continue;
-      visited[ny][nx]=true;
-      q.push([nx,ny]);
-    }
-  }
-  return visited;
-}
-
 /* ============ INIT ============ */
 function init(){
   if(_initializing)return;
@@ -163,50 +131,62 @@ function init(){
   _inputLocked=false;
   lastT=0;
 
-  grid=generateMap();
-  CELL=c.width/MW;
+  CELL=Math.floor(Math.min(c.width/MW,c.height/MH));
+  grid=[];
   pelletsLeft=0;totalPellets=0;
-  for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){
-    if(grid[y][x]==='.'||grid[y][x]==='o'){pelletsLeft++;totalPellets++;}
-  }
-  const midY=Math.floor(MH/2);
-  pacman={
-    x:midY,y:Math.floor(MW/2),
-    dir:{x:0,y:0},ndir:{x:0,y:0},
-    px:midY*CELL+CELL/2,py:Math.floor(MW/2)*CELL+CELL/2,
-    mouth:0
-  };
-  const spawns=[
-    {x:1,y:1,c:'#ff5757'},
-    {x:MW-2,y:1,c:'#ff8a65'},
-    {x:1,y:MH-2,c:'#b07ee8'},
-    {x:MW-2,y:MH-2,c:'#66d9ff'}
-  ];
-  const ghostCount=Math.min(2+Math.floor((level-1)/3),4);
-  ghosts=[];
-  for(let i=0;i<ghostCount;i++){
-    ghosts.push({
-      x:spawns[i].y,y:spawns[i].x,
-      px:spawns[i].y*CELL+CELL/2,
-      py:spawns[i].x*CELL+CELL/2,
-      dir:{x:0,y:0},color:spawns[i].c,
-      homeX:spawns[i].y,homeY:spawns[i].x,
-      dead:false,deadTimer:0
-    });
-  }
-  score=0;lives=3;
-  alive=true;gameActive=true;
-  powerTimer=0;
-  ghostTick=0;
-  fruit=null;
-  if(level>=2&&Math.random()<0.5){
-    const free=[];
-    for(let y=0;y<MH;y++)for(let x=0;x<MW;x++)if(grid[y][x]==='.')free.push({x,y});
-    if(free.length){
-      const f=free[Math.floor(Math.random()*free.length)];
-      fruit={x:f.y,y:f.x,expires:performance.now()+8000};
+  for(let y=0;y<MH;y++){
+    grid[y]=[];
+    for(let x=0;x<MW;x++){
+      const ch=MAZE[y][x];
+      grid[y][x]=ch;
+      if(ch==='.'||ch==='o'){pelletsLeft++;totalPellets++;}
     }
   }
+
+  // Pacman стартует в классической точке — внизу по центру
+  const px=Math.floor(MW/2);
+  const py=Math.floor(MH*0.72);
+  pacmanStart={x:px,y:py};
+  pacman={
+    x:px,y:py,
+    dir:{x:0,y:0},ndir:{x:0,y:0},
+    px:px*CELL+CELL/2,py:py*CELL+CELL/2,
+    mouth:0,dead:false,deadTimer:0
+  };
+  grid[py][px]=' ';
+
+  // Призраки — 4 классических: домашние позиции в центре
+  const gx=Math.floor(MW/2),gy=Math.floor(MH*0.5);
+  ghostHome={x:gx,y:gy};
+  const ghostDefs=[
+    {name:'blinky',color:'#ff5757',startX:gx-2,startY:gy-1,dir:{x:-1,y:0}},
+    {name:'pinky', color:'#ffb8c8',startX:gx,  startY:gy-1,dir:{x:0,y:1}},
+    {name:'inky',  color:'#66d9ff',startX:gx-1,startY:gy+1,dir:{x:1,y:0}},
+    {name:'clyde', color:'#ffb852',startX:gx+1,startY:gy+1,dir:{x:-1,y:0}}
+  ];
+  const ghostCount=Math.min(2+Math.floor((level-1)/2),4);
+  ghosts=[];
+  for(let i=0;i<ghostCount;i++){
+    const d=ghostDefs[i];
+    ghosts.push({
+      name:d.name,color:d.color,
+      x:d.startX,y:d.startY,
+      px:d.startX*CELL+CELL/2,
+      py:d.startY*CELL+CELL/2,
+      dir:{...d.dir},
+      mode:'chase',
+      modeTimer:0,
+      dead:false,deadTimer:0,
+      startX:d.startX,startY:d.startY
+    });
+    grid[d.startY][d.startX]=' ';
+  }
+
+  score=0;lives=3;
+  alive=true;gameActive=true;
+  powerTimer=0;powerGhostCombo=0;
+  fruit=null;fruitTimer=0;
+
   render();
   updateHud();
   _initializing=false;
@@ -219,14 +199,37 @@ function updateHud(){
   $('coins').textContent=totalCoins;
 }
 
-/* ============ MOVEMENT ============ */
+/* ============ ДВИЖЕНИЕ ============ */
 function canMove(gx,gy){
   if(gx<0||gy<0||gx>=MW||gy>=MH)return false;
-  return grid[gy][gx]!=='#';
+  const cell=grid[gy][gx];
+  if(cell==='#')return false;
+  return true;
 }
 
 function stepPacman(dt){
-  const speed=0.11;
+  if(pacman.dead){
+    pacman.deadTimer-=dt;
+    if(pacman.deadTimer<=0){
+      // Возрождение
+      pacman.x=pacmanStart.x;pacman.y=pacmanStart.y;
+      pacman.px=pacman.x*CELL+CELL/2;
+      pacman.py=pacman.y*CELL+CELL/2;
+      pacman.dir={x:0,y:0};pacman.ndir={x:0,y:0};
+      pacman.dead=false;
+      // Сброс призраков
+      for(const g of ghosts){
+        g.x=g.startX;g.y=g.startY;
+        g.px=g.x*CELL+CELL/2;
+        g.py=g.y*CELL+CELL/2;
+        g.dir={x:0,y:0};
+        g.dead=false;
+      }
+    }
+    return;
+  }
+
+  const speed=0.12;
   const targetX=pacman.y*CELL+CELL/2;
   const targetY=pacman.x*CELL+CELL/2;
   if(pacman.px!==targetX||pacman.py!==targetY){
@@ -234,6 +237,8 @@ function stepPacman(dt){
     pacman.py+=Math.sign(targetY-pacman.py)*Math.min(speed*dt,Math.abs(targetY-pacman.py));
     return;
   }
+
+  // На клетке — смотрим новое направление
   if(pacman.ndir.x||pacman.ndir.y){
     if(canMove(pacman.y+pacman.ndir.x,pacman.x+pacman.ndir.y)){
       pacman.dir={...pacman.ndir};
@@ -244,7 +249,7 @@ function stepPacman(dt){
     if(canMove(pacman.y+pacman.dir.x,pacman.x+pacman.dir.y)){
       pacman.y+=pacman.dir.x;
       pacman.x+=pacman.dir.y;
-      pacman.mouth+=0.15;
+      pacman.mouth+=0.18;
       eatPellet();
     } else {
       pacman.dir={x:0,y:0};
@@ -264,16 +269,20 @@ function eatPellet(){
     grid[pacman.x][pacman.y]=' ';
     pelletsLeft--;
     score+=50;
-    powerTimer=6500;
+    powerTimer=7000;
+    powerGhostCombo=0;
     updateHud();
+    playBeep(700);
     if(pelletsLeft<=0)winLevel();
   }
   if(fruit&&fruit.x===pacman.y&&fruit.y===pacman.x){
     score+=100;fruit=null;updateHud();
-    showToast('🍎 +100');
+    showToast('🍒 +100');
+    playBeep(1100);
   }
 }
 
+/* ============ ИИ ПРИЗРАКОВ (классический) ============ */
 function stepGhosts(dt){
   const now=performance.now();
   for(const g of ghosts){
@@ -281,89 +290,120 @@ function stepGhosts(dt){
       g.deadTimer-=dt;
       if(g.deadTimer<=0){
         g.dead=false;
-        g.x=g.homeX;g.y=g.homeY;
-        g.px=g.y*CELL+CELL/2;
-        g.py=g.x*CELL+CELL/2;
+        g.x=g.startX;g.y=g.startY;
+        g.px=g.x*CELL+CELL/2;
+        g.py=g.y*CELL+CELL/2;
       }
       continue;
     }
     const targetX=g.y*CELL+CELL/2;
     const targetY=g.x*CELL+CELL/2;
+    const ghostSpeed=powerTimer>0?0.06:0.09+level*0.004;
     if(g.px!==targetX||g.py!==targetY){
-      g.px+=Math.sign(targetX-g.px)*Math.min(ghostTick*dt,Math.abs(targetX-g.px));
-      g.py+=Math.sign(targetY-g.py)*Math.min(ghostTick*dt,Math.abs(targetY-g.py));
+      g.px+=Math.sign(targetX-g.px)*Math.min(ghostSpeed*dt,Math.abs(targetX-g.px));
+      g.py+=Math.sign(targetY-g.py)*Math.min(ghostSpeed*dt,Math.abs(targetY-g.py));
       continue;
     }
+
+    // Выбор направления
     const dirs=[[1,0],[-1,0],[0,1],[0,-1]].filter(d=>{
       const nx=g.y+d[0],ny=g.x+d[1];
-      if(nx<0||ny<0||nx>=MW||ny>=MH)return false;
-      return grid[ny][nx]!=='#';
+      return canMove(nx,ny);
     });
     if(!dirs.length)continue;
     const filtered=dirs.filter(d=>!(d[0]===-g.dir.x&&d[1]===-g.dir.y));
     const cands=filtered.length?filtered:dirs;
-    let pick;
+
+    // Целевая клетка в зависимости от режима
+    let tx,ty;
     if(powerTimer>0){
-      let best=null;
+      // В испуге — убегаем
+      tx=g.x<ghostHome.x?MW-2:1;
+      ty=g.y<ghostHome.y?MH-2:1;
+    } else {
+      switch(g.name){
+        case 'blinky':
+          // Красный — прямо к пакману
+          tx=pacman.x;ty=pacman.y;
+          break;
+        case 'pinky':
+          // Розовый — на 4 клетки впереди пакмана
+          tx=pacman.x+pacman.dir.x*4;
+          ty=pacman.y+pacman.dir.y*4;
+          break;
+        case 'inky':
+          // Голубой — комбинированный
+          tx=pacman.x+Math.sign(pacman.x-g.x)*2;
+          ty=pacman.y+Math.sign(pacman.y-g.y)*2;
+          break;
+        case 'clyde':
+          // Оранжевый — далеко преследует, близко убегает
+          {
+            const dist=Math.abs(g.x-pacman.x)+Math.abs(g.y-pacman.y);
+            if(dist>8){tx=pacman.x;ty=pacman.y;}
+            else {tx=1;ty=MH-2;}
+          }
+          break;
+        default:tx=pacman.x;ty=pacman.y;
+      }
+    }
+    // Случайность 10%
+    if(Math.random()<0.1){
+      tx=Math.floor(Math.random()*MW);
+      ty=Math.floor(Math.random()*MH);
+    }
+
+    // Выбираем направление дающее наименьшее расстояние
+    let pick=cands[0];
+    if(powerTimer>0){
+      let best=-1;
       for(const d of cands){
         const nx=g.y+d[0],ny=g.x+d[1];
-        const dist=Math.abs(nx-pacman.y)+Math.abs(ny-pacman.x);
-        if(!best||dist>best.dist)best={d,dist};
+        const dist=Math.abs(nx-tx)+Math.abs(ny-ty);
+        if(dist>best){best=dist;pick=d;}
       }
-      pick=best.d;
     } else {
-      if(Math.random()<0.75){
-        let best=null;
-        for(const d of cands){
-          const nx=g.y+d[0],ny=g.x+d[1];
-          const dist=Math.abs(nx-pacman.y)+Math.abs(ny-pacman.x);
-          if(!best||dist<best.dist)best={d,dist};
-        }
-        pick=best.d;
-      } else {
-        pick=cands[Math.floor(Math.random()*cands.length)];
+      let best=99999;
+      for(const d of cands){
+        const nx=g.y+d[0],ny=g.x+d[1];
+        const dist=Math.abs(nx-tx)+Math.abs(ny-ty);
+        if(dist<best){best=dist;pick=d;}
       }
     }
     g.dir={x:pick[0],y:pick[1]};
     g.y+=pick[0];g.x+=pick[1];
   }
+
+  // Проверка столкновения
   for(const g of ghosts){
     if(g.dead)continue;
-    if(Math.abs(g.px-pacman.px)<CELL*0.7&&Math.abs(g.py-pacman.py)<CELL*0.7){
+    if(Math.abs(g.px-pacman.px)<CELL*0.75&&Math.abs(g.py-pacman.py)<CELL*0.75){
       if(powerTimer>0){
-        g.dead=true;g.deadTimer=3000;
-        score+=200;updateHud();
-        playBeep(1200);
-      } else if(alive){
-        alive=false;lives--;
+        powerGhostCombo++;
+        const bonus=200*Math.pow(2,Math.min(powerGhostCombo-1,3));
+        score+=bonus;
+        updateHud();
+        showToast('+'+bonus);
+        g.dead=true;g.deadTimer=2500;
+        playBeep(1400);
+      } else if(!pacman.dead&&alive){
+        pacman.dead=true;
+        pacman.deadTimer=1200;
+        lives--;
         updateHud();
         playBeep(200);
+        _lockInput(1400);
         if(lives<=0){
           gameActive=false;
           _lockInput(600);
           _safeTimeout(()=>onLose(),100);
-        } else {
-          _lockInput(800);
-          _safeTimeout(()=>{
-            const midY=Math.floor(MH/2);
-            pacman.y=midY;pacman.x=Math.floor(MW/2);
-            pacman.dir={x:0,y:0};pacman.ndir={x:0,y:0};
-            pacman.px=pacman.y*CELL+CELL/2;
-            pacman.py=pacman.x*CELL+CELL/2;
-            for(const gh of ghosts){
-              gh.y=gh.homeX;gh.x=gh.homeY;
-              gh.px=gh.y*CELL+CELL/2;
-              gh.py=gh.x*CELL+CELL/2;
-              gh.dir={x:0,y:0};
-            }
-            alive=true;
-          },800);
         }
       }
     }
   }
 }
 
+/* ============ ПОБЕДА / ПОРАЖЕНИЕ ============ */
 function winLevel(){
   gameActive=false;
   _lockInput(600);
@@ -379,82 +419,126 @@ function winLevel(){
       'Следующий',()=>{level++;save();init();});
   },300);
 }
-
 function onLose(){
   showModal('💀 Игра окончена',
     'Очки: '+score+'<br>Уровень '+level,
     'Заново',()=>{init();});
 }
 
-/* ============ RENDER ============ */
+/* ============ РЕНДЕР ============ */
 function render(){
-  ctx.fillStyle='#050a14';ctx.fillRect(0,0,c.width,c.height);
-  for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){
-    const px=x*CELL,py=y*CELL;
-    const v=grid[y][x];
-    if(v==='#'){
-      ctx.fillStyle='#1a2540';
-      ctx.fillRect(px,py,CELL,CELL);
-      ctx.fillStyle='#2a3a5c';
-      ctx.fillRect(px+1,py+1,CELL-2,CELL-2);
-    } else if(v==='.'){
-      ctx.fillStyle='#ffd54a';
-      ctx.beginPath();ctx.arc(px+CELL/2,py+CELL/2,CELL*0.1,0,Math.PI*2);ctx.fill();
-    } else if(v==='o'){
-      const pulse=0.7+0.3*Math.sin(performance.now()/200);
-      ctx.fillStyle='#7ee8b0';
-      ctx.beginPath();ctx.arc(px+CELL/2,py+CELL/2,CELL*0.24*pulse,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#050a14';
+  ctx.fillRect(0,0,c.width,c.height);
+
+  for(let y=0;y<MH;y++){
+    for(let x=0;x<MW;x++){
+      const px=x*CELL,py=y*CELL;
+      const v=grid[y][x];
+      if(v==='#'){
+        ctx.fillStyle='#1a2540';
+        ctx.fillRect(px,py,CELL,CELL);
+        ctx.fillStyle='#2a3a5c';
+        ctx.fillRect(px+1,py+1,CELL-2,CELL-2);
+        ctx.fillStyle='#1a2540';
+        ctx.fillRect(px+2,py+2,CELL-4,CELL-4);
+      } else if(v==='.'){
+        ctx.fillStyle='#ffd54a';
+        ctx.beginPath();
+        ctx.arc(px+CELL/2,py+CELL/2,Math.max(1.5,CELL*0.1),0,Math.PI*2);
+        ctx.fill();
+      } else if(v==='o'){
+        const pulse=0.7+0.3*Math.sin(performance.now()/200);
+        ctx.fillStyle='#7ee8b0';
+        ctx.beginPath();
+        ctx.arc(px+CELL/2,py+CELL/2,CELL*0.25*pulse,0,Math.PI*2);
+        ctx.fill();
+        ctx.strokeStyle='rgba(126,232,176,.6)';
+        ctx.lineWidth=1;
+        ctx.beginPath();
+        ctx.arc(px+CELL/2,py+CELL/2,CELL*0.32,0,Math.PI*2);
+        ctx.stroke();
+      }
     }
   }
+
+  // Фрукт
   if(fruit&&fruit.expires>performance.now()){
     const px=fruit.y*CELL+CELL/2,py=fruit.x*CELL+CELL/2;
-    ctx.font=(CELL*0.8)+'px serif';ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText('🍎',px,py+1);
+    ctx.font=(CELL*1.1)+'px serif';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText('🍒',px,py+1);
   }
-  if(alive){
-    ctx.fillStyle=powerTimer>0?'#ffffff':'#7ee8b0';
+
+  // Pac-Man
+  if(alive&&!pacman.dead){
     const cx=pacman.px,cy=pacman.py;
+    ctx.fillStyle=powerTimer>0?'#ffffff':'#ffd54a';
+    ctx.shadowColor=powerTimer>0?'#ffffff':'#ffd54a';
+    ctx.shadowBlur=powerTimer>0?18:8;
     let ang=0;
     if(pacman.dir.x===1)ang=0;
     else if(pacman.dir.x===-1)ang=Math.PI;
     else if(pacman.dir.y===1)ang=Math.PI/2;
     else if(pacman.dir.y===-1)ang=-Math.PI/2;
-    const mouth=Math.abs(Math.sin(pacman.mouth))*0.5;
+    const mouth=Math.abs(Math.sin(pacman.mouth))*0.55;
     ctx.beginPath();
-    ctx.arc(cx,cy,CELL*0.42,ang+mouth,ang+Math.PI*2-mouth);
+    ctx.arc(cx,cy,CELL*0.44,ang+mouth,ang+Math.PI*2-mouth);
     ctx.lineTo(cx,cy);
     ctx.fill();
-    ctx.fillStyle='#000';
-    ctx.beginPath();
-    ctx.arc(cx+Math.cos(ang-Math.PI/2)*CELL*0.15,cy+Math.sin(ang-Math.PI/2)*CELL*0.15,CELL*0.07,0,Math.PI*2);
-    ctx.fill();
+    ctx.shadowBlur=0;
   }
+
+  // Призраки
   for(const g of ghosts){
     if(g.dead)continue;
     const cx=g.px,cy=g.py;
-    const col=powerTimer>0?'#3a7ee8':g.color;
+    const isFrightened=powerTimer>0;
+    const blink=isFrightened&&powerTimer<2000&&Math.floor(performance.now()/200)%2===0;
+    const col=blink?'#ffffff':(isFrightened?'#3a7ee8':g.color);
     ctx.fillStyle=col;
+    // Тело
     ctx.beginPath();
-    ctx.arc(cx,cy-CELL*0.1,CELL*0.4,Math.PI,0);
-    ctx.lineTo(cx+CELL*0.4,cy+CELL*0.35);
-    ctx.lineTo(cx+CELL*0.25,cy+CELL*0.25);
-    ctx.lineTo(cx+CELL*0.1,cy+CELL*0.35);
-    ctx.lineTo(cx-CELL*0.1,cy+CELL*0.25);
-    ctx.lineTo(cx-CELL*0.25,cy+CELL*0.35);
-    ctx.lineTo(cx-CELL*0.4,cy+CELL*0.25);
+    ctx.arc(cx,cy-CELL*0.12,CELL*0.42,Math.PI,0);
+    ctx.lineTo(cx+CELL*0.42,cy+CELL*0.36);
+    // Волнистая юбка
+    const w=CELL*0.42;
+    const bottom=cy+CELL*0.36;
+    for(let i=0;i<3;i++){
+      const x1=cx+w-(i*2+1)*w/3;
+      const x2=cx+w-(i*2+2)*w/3;
+      const x3=cx+w-(i*2+3)*w/3;
+      ctx.lineTo(x1,bottom);
+      ctx.lineTo((x1+x2)/2,bottom-CELL*0.1);
+      ctx.lineTo(x2,bottom);
+    }
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle='#fff';
-    ctx.beginPath();
-    ctx.arc(cx-CELL*0.15,cy-CELL*0.1,CELL*0.12,0,Math.PI*2);
-    ctx.arc(cx+CELL*0.15,cy-CELL*0.1,CELL*0.12,0,Math.PI*2);
-    ctx.fill();
-    ctx.fillStyle='#000';
-    const dx=g.dir.x*CELL*0.05,dy=g.dir.y*CELL*0.05;
-    ctx.beginPath();
-    ctx.arc(cx-CELL*0.15+dx,cy-CELL*0.1+dy,CELL*0.06,0,Math.PI*2);
-    ctx.arc(cx+CELL*0.15+dx,cy-CELL*0.1+dy,CELL*0.06,0,Math.PI*2);
-    ctx.fill();
+
+    // Глаза
+    if(isFrightened){
+      ctx.fillStyle='#fff';
+      ctx.beginPath();
+      ctx.arc(cx-CELL*0.14,cy-CELL*0.1,CELL*0.09,0,Math.PI*2);
+      ctx.arc(cx+CELL*0.14,cy-CELL*0.1,CELL*0.09,0,Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle='#ff5757';
+      ctx.beginPath();
+      ctx.arc(cx-CELL*0.14,cy-CELL*0.1,CELL*0.04,0,Math.PI*2);
+      ctx.arc(cx+CELL*0.14,cy-CELL*0.1,CELL*0.04,0,Math.PI*2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle='#fff';
+      ctx.beginPath();
+      ctx.arc(cx-CELL*0.15,cy-CELL*0.08,CELL*0.14,0,Math.PI*2);
+      ctx.arc(cx+CELL*0.15,cy-CELL*0.08,CELL*0.14,0,Math.PI*2);
+      ctx.fill();
+      const dx=g.dir.x*CELL*0.06,dy=g.dir.y*CELL*0.06;
+      ctx.fillStyle='#000';
+      ctx.beginPath();
+      ctx.arc(cx-CELL*0.15+dx,cy-CELL*0.08+dy,CELL*0.07,0,Math.PI*2);
+      ctx.arc(cx+CELL*0.15+dx,cy-CELL*0.08+dy,CELL*0.07,0,Math.PI*2);
+      ctx.fill();
+    }
   }
 }
 
@@ -471,6 +555,17 @@ function loop(t){
       stepGhosts(dt);
       if(powerTimer>0)powerTimer=Math.max(0,powerTimer-dt);
       if(fruit&&fruit.expires<performance.now())fruit=null;
+      // Фрукт раз в 30 сек
+      fruitTimer+=dt;
+      if(fruitTimer>30000&&!fruit){
+        fruitTimer=0;
+        const spots=[];
+        for(let y=0;y<MH;y++)for(let x=0;x<MW;x++)if(grid[y][x]==='.')spots.push({x,y});
+        if(spots.length){
+          const s=spots[Math.floor(Math.random()*spots.length)];
+          fruit={x:s.y,y:s.x,expires:performance.now()+9000};
+        }
+      }
     }
     render();
     requestAnimationFrame(tick);

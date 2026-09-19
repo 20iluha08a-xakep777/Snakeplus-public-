@@ -1,217 +1,35 @@
 <!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Snake Blocks</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
-body{background:#0d1526;color:#e8eefc;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;padding:10px;user-select:none;-webkit-tap-highlight-color:transparent;overflow:hidden;gap:8px}
-.title{font-size:11px;letter-spacing:4px;color:rgba(200,220,255,.5);text-transform:uppercase}
-.hud{width:min(94vw,360px);display:flex;justify-content:space-between;font-size:10px;letter-spacing:1px;color:#9fb0d0}
-.hud b{color:#7ee8b0;font-size:13px;margin-left:4px}
-canvas{width:min(94vw,360px);height:min(94vw,360px);border-radius:12px;background:#050a14;box-shadow:0 0 0 2px #2a3a5c,0 0 30px rgba(126,232,176,.15);touch-action:none;display:block}
-.btns{display:flex;gap:8px}
-button{font:inherit;font-size:12px;font-weight:700;padding:8px 14px;border-radius:8px;border:2px solid #7ee8b0;background:transparent;color:#7ee8b0;cursor:pointer;letter-spacing:1px}
-button:active{background:#7ee8b0;color:#06210f}
-.dpad{display:grid;grid-template-columns:repeat(3,44px);grid-template-rows:repeat(2,44px);gap:4px}
-.dpad button{width:44px;height:44px;padding:0;font-size:16px;border-radius:10px;border:2px solid #2a3a5c;background:linear-gradient(180deg,#2a3a5c,#1a2540);color:#7ee8b0;display:flex;align-items:center;justify-content:center}
-.dpad .sp{visibility:hidden}
-.modes{display:flex;gap:6px;margin-top:4px}
-.modes button{font-size:11px;padding:5px 10px}
-.modes button.active{background:#7ee8b0;color:#06210f}
-.overlay{position:fixed;inset:0;background:rgba(5,10,20,.94);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:10;padding:24px;text-align:center}
-.overlay.show{display:flex}
-.overlay h2{color:#7ee8b0;font-size:22px;letter-spacing:3px}
-.overlay p{color:#9fb0d0;font-size:13px;line-height:1.7}
-.overlay b{color:#fff;font-size:16px}
-</style>
-</head>
-<body>
-<div class="title">Snake Blocks</div>
-<div class="hud"><span>СЧЁТ<b id="score">0</b></span><span>БЛОКИ<b id="blocks">0/10</b></span><span>УР.<b id="lvl">1</b></div>
-<canvas id="c" width="360" height="360"></canvas>
-<div class="modes">
-<button data-target="10">10</button>
-<button data-target="20">20</button>
-<button data-target="30">30</button>
-<button data-target="50">50</button>
-</div>
-<div class="btns"><button id="bNew">Заново</button><button id="bExit">← Назад</button></div>
-<div class="dpad">
-<div class="sp"></div><button data-dir="up">▲</button><div class="sp"></div>
-<button data-dir="left">◀</button><button data-dir="down">▼</button><button data-dir="right">▶</button>
-</div>
-<div class="overlay" id="ov"><h2 id="ovT">Игра окончена</h2><p id="ovP"></p><button id="ovB">Ещё раз</button></div>
-<script>
-(function(){
-'use strict';
-const cvs=document.getElementById('c'),ctx=cvs.getContext('2d');
-const W=360,H=360,G=15,CELL=W/G;
-const BLOCK_COLORS=['#ff5757','#ffb84d','#ffd54a','#7ee8b0','#66d9ff','#b07ee8'];
-let snake,dir,dirQ,blocks,score,collected,target,running,over,win,acc,last,tickMs,level;
-let hi=Number(localStorage.getItem('sb_hi')||0);
-function init(t){
-  target=t||10;
-  level=1;
-  snake=[{x:7,y:7},{x:6,y:7},{x:5,y:7}];
-  dir={x:1,y:0};dirQ=[];
-  blocks=[];
-  score=0;collected=0;
-  running=true;over=false;win=false;
-  acc=0;last=0;tickMs=170;
-  spawnBlocks(3);
-  updateHUD();
-  document.getElementById('ov').classList.remove('show');
-  updateModeButtons();
-}
-function updateModeButtons(){
-  document.querySelectorAll('.modes button').forEach(b=>b.classList.toggle('active',+b.dataset.target===target));
-}
-function updateHUD(){
-  document.getElementById('score').textContent=score;
-  document.getElementById('blocks').textContent=collected+'/'+target;
-  document.getElementById('lvl').textContent=level;
-  if(score>hi){hi=score;localStorage.setItem('sb_hi',hi);}
-}
-function spawnBlocks(n){
-  for(let i=0;i<n;i++){
-    for(let t=0;t<300;t++){
-      const x=Math.floor(Math.random()*G),y=Math.floor(Math.random()*G);
-      if(snake.some(s=>s.x===x&&s.y===y))continue;
-      if(blocks.some(b=>b.x===x&&b.y===y))continue;
-      blocks.push({x,y,color:BLOCK_COLORS[Math.floor(Math.random()*BLOCK_COLORS.length)],born:performance.now()});
-      break;
-    }
-  }
-}
-function setDir(x,y){
-  if(!running)return;
-  const r=dirQ.length?dirQ[dirQ.length-1]:dir;
-  if(r.x===-x&&r.y===-y)return;
-  if(r.x===x&&r.y===y)return;
-  if(dirQ.length>=2)dirQ.shift();
-  dirQ.push({x,y});
-}
-function step(){
-  if(dirQ.length)dir=dirQ.shift();
-  const h={x:snake[0].x+dir.x,y:snake[0].y+dir.y};
-  if(h.x<0||h.x>=G||h.y<0||h.y>=G)return die();
-  for(let i=0;i<snake.length-1;i++)if(snake[i].x===h.x&&snake[i].y===h.y)return die();
-  const idx=blocks.findIndex(b=>b.x===h.x&&b.y===h.y);
-  snake.unshift(h);
-  if(idx>=0){
-    blocks.splice(idx,1);
-    collected++;
-    score+=25;
-    // level up every 10 blocks
-    const newLevel=Math.floor(collected/10)+1;
-    if(newLevel>level){level=newLevel;}
-    updateHUD();
-    if(collected>=target){
-      running=false;win=true;
-      window.parent.postMessage({type:'addCoins',amount:Math.max(10,Math.floor(score/10))},'*');
-      document.getElementById('ovT').textContent='🏆 Цель достигнута!';
-      document.getElementById('ovP').innerHTML='Собрано: <b>'+collected+'/'+target+'</b><br>Счёт: <b>'+score+'</b>';
-      document.getElementById('ov').classList.add('show');
-      return;
-    }
-    if(blocks.length<3)spawnBlocks(3-blocks.length);
-    tickMs=Math.max(60,tickMs-4);
-  } else snake.pop();
-}
-function die(){
-  running=false;over=true;
-  window.parent.postMessage({type:'addCoins',amount:Math.max(1,Math.floor(score/20))},'*');
-  document.getElementById('ovT').textContent='Игра окончена';
-  document.getElementById('ovP').innerHTML='Собрано: <b>'+collected+'/'+target+'</b><br>Счёт: <b>'+score+'</b>';
-  document.getElementById('ov').classList.add('show');
-}
-function draw(){
-  ctx.fillStyle='#050a14';ctx.fillRect(0,0,W,H);
-  ctx.strokeStyle='rgba(126,232,176,.05)';ctx.lineWidth=1;
-  for(let i=1;i<G;i++){ctx.beginPath();ctx.moveTo(i*CELL,0);ctx.lineTo(i*CELL,H);ctx.stroke();}
-  for(let i=1;i<G;i++){ctx.beginPath();ctx.moveTo(0,i*CELL);ctx.lineTo(W,i*CELL);ctx.stroke();}
-  const now=performance.now();
-  for(const b of blocks){
-    const age=Math.min(1,(now-b.born)/300);
-    const cx=b.x*CELL+CELL/2,cy=b.y*CELL+CELL/2;
-    const r=CELL*0.4*age;
-    ctx.shadowColor=b.color;ctx.shadowBlur=14;
-    ctx.fillStyle=b.color;
-    if(ctx.roundRect){ctx.beginPath();ctx.roundRect(cx-r,cy-r,r*2,r*2,4);ctx.fill();}
-    else ctx.fillRect(cx-r,cy-r,r*2,r*2);
-    ctx.shadowBlur=0;
-    ctx.strokeStyle='rgba(255,255,255,.5)';ctx.lineWidth=2;
-    ctx.beginPath();
-    ctx.moveTo(cx-r*0.5,cy-r*0.5);ctx.lineTo(cx+r*0.5,cy+r*0.5);
-    ctx.moveTo(cx+r*0.5,cy-r*0.5);ctx.lineTo(cx-r*0.5,cy+r*0.5);
-    ctx.stroke();
-  }
-  for(let i=snake.length-1;i>=0;i--){
-    const s=snake[i],t=i/Math.max(snake.length-1,1);
-    const r=CELL*0.42-t*0.06;
-    ctx.fillStyle=i===0?'#a8ffd0':`hsl(${150+t*30},${70-t*25}%,${60-t*22}%)`;
-    if(i===0){ctx.shadowColor='#7ee8b0';ctx.shadowBlur=14;}
-    const cx=s.x*CELL+CELL/2,cy=s.y*CELL+CELL/2;
-    ctx.beginPath();
-    if(ctx.roundRect)ctx.roundRect(cx-r,cy-r,r*2,r*2,r*0.5);
-    else ctx.rect(cx-r,cy-r,r*2,r*2);
-    ctx.fill();ctx.shadowBlur=0;
-  }
-  if(snake.length){
-    const h=snake[0],hx=h.x*CELL+CELL/2,hy=h.y*CELL+CELL/2;
-    const dx=dir.x,dy=dir.y,px=-dy,py=dx;
-    const oF=CELL*0.14,oS=CELL*0.17,eR=CELL*0.09;
-    ctx.fillStyle='#000';
-    ctx.beginPath();ctx.arc(hx+dx*oF+px*oS,hy+dy*oF+py*oS,eR,0,Math.PI*2);ctx.fill();
-    ctx.beginPath();ctx.arc(hx+dx*oF-px*oS,hy+dy*oF-py*oS,eR,0,Math.PI*2);ctx.fill();
-  }
-}
-function loop(t){
-  const dt=Math.min(50,t-(last||t));last=t;
-  if(running){
-    acc+=dt;
-    while(acc>=tickMs){acc-=tickMs;step();if(!running)break;}
-  }
-  draw();
-  requestAnimationFrame(loop);
-}
-document.querySelectorAll('.dpad button').forEach(b=>b.addEventListener('click',()=>{
-  const d=b.dataset.dir;
-  if(d==='up')setDir(0,-1);else if(d==='down')setDir(0,1);
-  else if(d==='left')setDir(-1,0);else if(d==='right')setDir(1,0);
-}));
-document.querySelectorAll('.modes button').forEach(b=>b.addEventListener('click',()=>init(+b.dataset.target)));
-let tx=0,ty=0;
-cvs.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;},{passive:true});
-cvs.addEventListener('touchend',e=>{
-  const dx=e.changedTouches[0].clientX-tx,dy=e.changedTouches[0].clientY-ty;
-  if(Math.hypot(dx,dy)<18)return;
-  if(Math.abs(dx)>Math.abs(dy))setDir(dx>0?1:-1,0);else setDir(0,dy>0?1:-1);
-},{passive:true});
-document.addEventListener('keydown',e=>{
-  const k=e.key.toLowerCase();
-  if(k==='arrowup'||k==='w'||k==='ц'){e.preventDefault();setDir(0,-1);}
-  else if(k==='arrowdown'||k==='s'||k==='ы'){e.preventDefault();setDir(0,1);}
-  else if(k==='arrowleft'||k==='a'||k==='ф'){e.preventDefault();setDir(-1,0);}
-  else if(k==='arrowright'||k==='d'||k==='в'){e.preventDefault();setDir(1,0);}
-});
-window.addEventListener('message',e=>{
-  const d=e.data;if(!d||d.type!=='input')return;
-  if(d.act==='up')setDir(0,-1);else if(d.act==='down')setDir(0,1);
-  else if(d.act==='left')setDir(-1,0);else if(d.act==='right')setDir(1,0);
-  else if(d.act==='back'||d.act==='menu')window.parent.postMessage({type:'exit'},'*');
-  else if(d.act==='ok'&&!running)init(target);
-});
-document.getElementById('bNew').addEventListener('click',()=>init(target));
-document.getElementById('ovB').addEventListener('click',()=>init(target));
-document.getElementById('bExit').addEventListener('click',()=>window.parent.postMessage({type:'exit'},'*'));
-document.body.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
-init(10);
-requestAnimationFrame(loop);
-})();
-</script>
-</body>
-</html>
+<html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"><title>Snake Blocks</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}html,body{height:100%;overflow:hidden}body{background:#0d1526;color:#e8eefc;font-family:system-ui,-apple-system,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;user-select:none;padding:8px;gap:8px}.hud{display:flex;gap:14px;font-size:11px;letter-spacing:1px;color:rgba(200,220,255,.6);text-transform:uppercase}.hud b{color:#7ee8b0;font-size:13px;margin-left:4px}.wrap{position:relative;display:flex}.msg{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(5,10,20,.94);border-radius:10px;gap:12px;padding:20px;text-align:center;z-index:10}.msg.show{display:flex}.msg h2{color:#7ee8b0;font-size:20px}.msg p{font-size:12px;color:rgba(200,220,255,.75);line-height:1.6}.msg button{font:inherit;font-size:13px;font-weight:700;padding:10px 22px;border:2px solid #7ee8b0;border-radius:8px;background:#7ee8b0;color:#06210f;cursor:pointer}.pad{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:6px;max-width:180px;width:58vw}.pad button{aspect-ratio:1;font:inherit;border:1.5px solid #2a3a5c;border-radius:8px;color:#cfe0ff;font-size:16px;font-weight:700;background:linear-gradient(180deg,#2a3a5c,#1a2540);cursor:pointer}.pad button:active{color:#7ee8b0;border-color:#7ee8b0}.pad .ok{color:#06210f;border-color:#7ee8b0;background:linear-gradient(180deg,#8ff5bd,#48c98a)}</style></head><body>
+<div class="hud"><span>Ур.<b id="lv">1</b></span><span>Ходы<b id="mv">0</b></span><span>Собрано<b id="cl">0/3</b></span><span>💰<b id="coins">0</b></span></div>
+<div class="wrap"><canvas id="c" width="380" height="380"></canvas><div class="msg" id="msg"></div></div>
+<div class="pad" id="pad"></div>
+<script>(function(){const $=id=>document.getElementById(id),c=$('c'),ctx=c.getContext('2d');
+const S=10,CELL=c.width/S;
+let snake,dir,blocks,collected,targets,moves,alive,level;
+let totalCoins=Number(localStorage.getItem('blocks_coins')||0);
+function init(){snake=[{x:1,y:1}];dir={x:1,y:0};collected=0;moves=0;alive=true;targets=[];blocks=[];
+const count=3+Math.min(level-1,5);
+for(let i=0;i<count;i++){let pos;do{pos={x:1+Math.floor(Math.random()*(S-2)),y:1+Math.floor(Math.random()*(S-2))};}while(snake.some(s=>s.x===pos.x&&s.y===pos.y)||targets.some(t=>t.x===pos.x&&t.y===pos.y));targets.push({...pos,collected:false});}
+const bcount=Math.min(level,6);for(let i=0;i<bcount;i++){let pos;do{pos={x:1+Math.floor(Math.random()*(S-2)),y:1+Math.floor(Math.random()*(S-2))};}while(snake.some(s=>s.x===pos.x&&s.y===pos.y)||targets.some(t=>t.x===pos.x&&t.y===pos.y)||blocks.some(b=>b.x===pos.x&&b.y===pos.y));blocks.push(pos);}
+render();}
+function show(t,p,b,n){const m=$('msg');m.innerHTML='<h2>'+t+'</h2><p>'+p+'</p>';m.classList.add('show');const bt=document.createElement('button');bt.textContent=b;bt.onclick=()=>{m.classList.remove('show');n();};m.appendChild(bt);}
+function move(dx,dy){if(!alive)return;const head=snake[0];const nx=head.x+dx,ny=head.y+dy;
+if(nx<0||ny<0||nx>=S||ny>=S){alive=false;level=1;localStorage.setItem('blocks_lv',1);show('🚫 В стену!','Ходы: '+moves,'Заново',init);return;}
+if(blocks.some(b=>b.x===nx&&b.y===ny))return;
+if(snake.some(s=>s.x===nx&&s.y===ny))return;
+snake.unshift({x:nx,y:ny});snake.pop();moves++;dir={x:dx,y:dy};
+const t=targets.find(t=>!t.collected&&t.x===nx&&t.y===ny);if(t){t.collected=true;collected++;}
+if(collected>=targets.length){const r=20+level*8;totalCoins+=r;localStorage.setItem('blocks_coins',totalCoins);try{window.parent.postMessage({type:'addCoins',amount:r},'*');}catch(e){}level++;localStorage.setItem('blocks_lv',level);show('🎉 Уровень пройден!','+'+r+'💰<br>Ходы: '+moves,'Дальше',init);return;}
+render();}
+function render(){ctx.fillStyle='#050a14';ctx.fillRect(0,0,c.width,c.height);
+for(let y=0;y<S;y++)for(let x=0;x<S;x++){ctx.fillStyle=(x+y)%2?'rgba(255,255,255,.02)':'rgba(255,255,255,.04)';ctx.fillRect(x*CELL,y*CELL,CELL,CELL);}
+for(const b of blocks){ctx.fillStyle='#22304d';ctx.beginPath();if(ctx.roundRect)ctx.roundRect(b.x*CELL+2,b.y*CELL+2,CELL-4,CELL-4,4);else ctx.rect(b.x*CELL+2,b.y*CELL+2,CELL-4,CELL-4);ctx.fill();}
+for(const t of targets){if(t.collected)continue;ctx.fillStyle='#ffd54a';ctx.beginPath();ctx.arc(t.x*CELL+CELL/2,t.y*CELL+CELL/2,CELL*0.35,0,7);ctx.fill();ctx.fillStyle='#06210f';ctx.font='bold '+(CELL*0.4)+'px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('★',t.x*CELL+CELL/2,t.y*CELL+CELL/2+1);}
+for(let i=snake.length-1;i>=0;i--){const s=snake[i];const a=i===0?1:0.5+0.5*(1-i/snake.length);ctx.fillStyle=i===0?'#a8ffd0':'rgba(126,232,176,'+a+')';ctx.beginPath();if(ctx.roundRect)ctx.roundRect(s.x*CELL+2,s.y*CELL+2,CELL-4,CELL-4,4);else ctx.rect(s.x*CELL+2,s.y*CELL+2,CELL-4,CELL-4);ctx.fill();}
+$('lv').textContent=level;$('mv').textContent=moves;$('cl').textContent=collected+'/'+targets.length;$('coins').textContent=totalCoins;}
+const pad=$('pad');[{},{l:'▲',d:[0,-1]},{},{l:'◀',d:[-1,0]},{l:'OK',ok:1},{l:'▶',d:[1,0]},{},{l:'▼',d:[0,1]},{}].forEach(it=>{const b=document.createElement('button');b.textContent=it.l||'';if(it.ok)b.className='ok';b.addEventListener('click',()=>{if(it.ok){if(!alive)init();}else if(it.d)move(it.d[0],it.d[1]);});pad.appendChild(b);});
+document.addEventListener('keydown',e=>{const m={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1],a:[-1,0],d:[1,0],w:[0,-1],s:[0,1]}[e.key];if(m){e.preventDefault();move(m[0],m[1]);}});
+let sx=0,sy=0;c.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY;},{passive:true});c.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;if(Math.hypot(dx,dy)<20)return;if(Math.abs(dx)>Math.abs(dy))move(dx>0?1:-1,0);else move(0,dy>0?1:-1);},{passive:true});
+window.addEventListener('message',e=>{const d=e.data;if(!d||typeof d!=='object')return;if(d.type==='input'){const m={left:[-1,0],right:[1,0],up:[0,-1],down:[0,1]};if(m[d.act])move(m[d.act][0],m[d.act][1]);else if(d.act==='back')try{window.parent.postMessage({type:'exit'},'*');}catch(e){}}});
+level=Number(localStorage.getItem('blocks_lv')||1);init();})();</script></body></html>

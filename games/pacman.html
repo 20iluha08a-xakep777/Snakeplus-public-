@@ -13,7 +13,7 @@ body{background:#0d1526;color:#e8eefc;font-family:system-ui,-apple-system,sans-s
 .hdr b{color:#7ee8b0;font-size:12px;margin-left:3px}
 .hdr .coins{font-size:11px;color:#ffd54a;font-weight:800}
 .stage{flex:1;display:flex;align-items:center;justify-content:center;min-height:0;overflow:hidden;position:relative}
-canvas{background:#050a14;border-radius:12px;box-shadow:inset 0 0 30px rgba(0,0,0,.9),0 0 0 1.5px rgba(126,232,176,.25);display:block;touch-action:none;max-width:100%;max-height:100%}
+canvas{background:#050a14;border-radius:12px;box-shadow:inset 0 0 30px rgba(0,0,0,.9),0 0 0 1.5px rgba(126,232,176,.25);display:block;touch-action:none}
 .pad{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:5px;max-width:160px;width:46vw;margin:0 auto;flex-shrink:0}
 .pad button{aspect-ratio:1;font:inherit;border:1.5px solid #2a3a5c;border-radius:10px;color:#cfe0ff;font-size:20px;font-weight:700;background:linear-gradient(180deg,#2a3a5c,#1a2540);cursor:pointer;touch-action:none;transition:transform .08s;user-select:none;display:flex;align-items:center;justify-content:center}
 .pad button:active,.pad button.pressed{color:#7ee8b0;border-color:#7ee8b0;transform:scale(.94)}
@@ -41,7 +41,7 @@ canvas{background:#050a14;border-radius:12px;box-shadow:inset 0 0 30px rgba(0,0,
     <span>Ур.<b id="lv">1</b> · Очки<b id="sc">0</b> · Жизни<b id="hp">3</b></span>
     <span class="coins">💰 <span id="coins">0</span></span>
   </div>
-  <div class="stage"><canvas id="c" width="400" height="480"></canvas></div>
+  <div class="stage"><canvas id="c"></canvas></div>
   <div class="pad" id="pad"></div>
 </div>
 <div class="msg" id="msg"></div>
@@ -54,22 +54,15 @@ const $=id=>document.getElementById(id);
 const c=$('c'),ctx=c.getContext('2d');
 
 /* ============ ANTI-LAG ============ */
-let _gen=0;
-let _timers=[];
-let _inputLocked=false;
-let _initializing=false;
+let _gen=0,_timers=[],_inputLocked=false,_initializing=false;
 function _safeTimeout(fn,ms){
   const id=setTimeout(()=>{_timers=_timers.filter(t=>t!==id);fn();},ms);
-  _timers.push(id);
-  return id;
+  _timers.push(id);return id;
 }
-function _clearAllTimers(){
-  _timers.forEach(id=>{clearTimeout(id);clearInterval(id);});
-  _timers=[];
-}
+function _clearAllTimers(){_timers.forEach(id=>{clearTimeout(id);clearInterval(id);});_timers=[];}
 function _lockInput(ms){_inputLocked=true;_safeTimeout(()=>{_inputLocked=false;},ms||400);}
 
-/* ============ ОРИГИНАЛЬНЫЙ ЛАБИРИНТ 21×25 ============ */
+/* ============ ЛАБИРИНТ ============ */
 const MAZE=[
 "#####################",
 "#.........#.........#",
@@ -98,7 +91,7 @@ const MAZE=[
 "#####################"
 ];
 const MW=21,MH=25;
-let CELL;
+let CELL=18;
 
 let grid,pelletsLeft;
 let pacman,ghosts,score,lives,level,alive,gameActive;
@@ -121,16 +114,11 @@ function postProgress(){try{window.parent.postMessage({type:'gameProgress',game:
 
 /* ============ ОЗВУЧКА ============ */
 let audioCtx=null;
-function ac(){
-  if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-  if(audioCtx.state==='suspended')audioCtx.resume();
-  return audioCtx;
-}
+function ac(){if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')audioCtx.resume();return audioCtx;}
 let chompHigh=false;
 function playChomp(){
   try{
-    const a=ac();
-    const now=a.currentTime;
+    const a=ac(),now=a.currentTime;
     const osc=a.createOscillator(),g=a.createGain();
     osc.type='square';
     osc.frequency.value=chompHigh?280:190;
@@ -143,12 +131,10 @@ function playChomp(){
 }
 function playPower(){
   try{
-    const a=ac();
-    const now=a.currentTime;
+    const a=ac(),now=a.currentTime;
     for(let i=0;i<4;i++){
       const osc=a.createOscillator(),g=a.createGain();
-      osc.type='square';
-      osc.frequency.value=280+i*140;
+      osc.type='square';osc.frequency.value=280+i*140;
       const t=now+i*0.06;
       g.gain.setValueAtTime(0.05,t);
       g.gain.exponentialRampToValueAtTime(0.001,t+0.07);
@@ -159,12 +145,10 @@ function playPower(){
 }
 function playEatGhost(){
   try{
-    const a=ac();
-    const now=a.currentTime;
+    const a=ac(),now=a.currentTime;
     for(let i=0;i<6;i++){
       const osc=a.createOscillator(),g=a.createGain();
-      osc.type='square';
-      osc.frequency.value=200+i*120;
+      osc.type='square';osc.frequency.value=200+i*120;
       const t=now+i*0.045;
       g.gain.setValueAtTime(0.055,t);
       g.gain.exponentialRampToValueAtTime(0.001,t+0.07);
@@ -175,8 +159,7 @@ function playEatGhost(){
 }
 function playDeath(){
   try{
-    const a=ac();
-    const now=a.currentTime;
+    const a=ac(),now=a.currentTime;
     const osc=a.createOscillator(),g=a.createGain();
     osc.type='sawtooth';
     osc.frequency.setValueAtTime(900,now);
@@ -189,12 +172,10 @@ function playDeath(){
 }
 function playFruit(){
   try{
-    const a=ac();
-    const now=a.currentTime;
+    const a=ac(),now=a.currentTime;
     [880,1175,1568].forEach((f,i)=>{
       const osc=a.createOscillator(),g=a.createGain();
-      osc.type='triangle';
-      osc.frequency.value=f;
+      osc.type='triangle';osc.frequency.value=f;
       const t=now+i*0.07;
       g.gain.setValueAtTime(0.08,t);
       g.gain.exponentialRampToValueAtTime(0.001,t+0.1);
@@ -205,12 +186,10 @@ function playFruit(){
 }
 function playLevelUp(){
   try{
-    const a=ac();
-    const now=a.currentTime;
+    const a=ac(),now=a.currentTime;
     [523,659,784,1047,1319].forEach((f,i)=>{
       const osc=a.createOscillator(),g=a.createGain();
-      osc.type='triangle';
-      osc.frequency.value=f;
+      osc.type='triangle';osc.frequency.value=f;
       const t=now+i*0.1;
       g.gain.setValueAtTime(0.1,t);
       g.gain.exponentialRampToValueAtTime(0.001,t+0.15);
@@ -226,14 +205,23 @@ function resizeCanvas(){
   const r=stage.getBoundingClientRect();
   const availW=Math.floor(r.width);
   const availH=Math.floor(r.height);
-  // Соотношение лабиринта 21:25
+  if(availW<=0||availH<=0){
+    // fallback
+    c.width=360;c.height=428;
+    c.style.width='360px';c.style.height='428px';
+    CELL=Math.min(c.width/MW,c.height/MH);
+    return;
+  }
   const ratio=MW/MH;
-  let w=availW, h=Math.floor(w/ratio);
+  let w=availW,h=Math.floor(w/ratio);
   if(h>availH){h=availH;w=Math.floor(h*ratio);}
+  // Ограничим — не меньше 14px на клетку
+  CELL=Math.max(14,Math.min(w/MW,h/MH));
+  w=Math.floor(CELL*MW);
+  h=Math.floor(CELL*MH);
   c.width=w;c.height=h;
   c.style.width=w+'px';
   c.style.height=h+'px';
-  CELL=Math.min(w/MW,h/MH);
 }
 
 /* ============ INIT ============ */
@@ -257,17 +245,21 @@ function init(){
     }
   }
 
-  const px=Math.floor(MW/2);
-  const py=MH-4;
+  // Пакман — под домом призраков, строка 19 (там точно пусто)
+  const px=Math.floor(MW/2); // 10
+  const py=19;
   pacmanStart={x:px,y:py};
+  // Чистим пеллет если он там
+  if(grid[py][px]==='.'||grid[py][px]==='o'){pelletsLeft--;}
+  grid[py][px]=' ';
   pacman={
     x:px,y:py,
     dir:{x:0,y:0},ndir:{x:0,y:0},
     px:px*CELL+CELL/2,py:py*CELL+CELL/2,
     mouth:0,dead:false,deadTimer:0
   };
-  grid[py][px]=' ';
 
+  // Призраки — 4 классических
   const gx=Math.floor(MW/2),gy=Math.floor(MH/2);
   ghostHome={x:gx,y:gy};
   const defs=[
@@ -280,16 +272,26 @@ function init(){
   ghosts=[];
   for(let i=0;i<cnt;i++){
     const d=defs[i];
+    // Проверим что стартовая клетка не стена
+    let sx=d.sx,sy=d.sy;
+    if(grid[sy][sx]==='#'){
+      // Ищем свободного соседа
+      outer:for(let dy=-1;dy<=1;dy++){
+        for(let dx=-1;dx<=1;dx++){
+          if(sx+dx>0&&sx+dx<MW-1&&sy+dy>0&&sy+dy<MH-1&&grid[sy+dy][sx+dx]!=='#'){sx+=dx;sy+=dy;break outer;}
+        }
+      }
+    }
     ghosts.push({
       name:d.name,color:d.color,
-      x:d.sx,y:d.sy,
-      px:d.sx*CELL+CELL/2,
-      py:d.sy*CELL+CELL/2,
+      x:sx,y:sy,
+      px:sx*CELL+CELL/2,
+      py:sy*CELL+CELL/2,
       dir:{...d.dir},
       dead:false,deadTimer:0,
-      startX:d.sx,startY:d.sy
+      startX:sx,startY:sy
     });
-    grid[d.sy][d.sx]=' ';
+    grid[sy][sx]=' ';
   }
 
   score=0;lives=3;
@@ -420,7 +422,7 @@ function stepGhosts(dt){
         case 'inky':tx=pacman.x+Math.sign(pacman.x-g.x)*2;ty=pacman.y+Math.sign(pacman.y-g.y)*2;break;
         case 'clyde':{
           const dist=Math.abs(g.x-pacman.x)+Math.abs(g.y-pacman.y);
-          if(dist>8){tx=pacman.x;ty=pacman.y;} else {tx=1;ty=MH-2;}
+          if(dist>8){tx=pacman.x;ty=pacman.y;}else{tx=1;ty=MH-2;}
           break;
         }
         default:tx=pacman.x;ty=pacman.y;
@@ -475,7 +477,7 @@ function stepGhosts(dt){
   }
 }
 
-/* ============ WIN / LOSE ============ */
+/* ============ WIN/LOSE ============ */
 function winLevel(){
   gameActive=false;
   if(doneLevels.indexOf(level)===-1)doneLevels.push(level);
@@ -522,7 +524,7 @@ function render(){
         ctx.fillStyle='#7ee8b0';
         ctx.shadowColor='#7ee8b0';ctx.shadowBlur=12;
         ctx.beginPath();
-        ctx.arc(px+CELL/2,py+CELL/2,CELL*0.26*pulse,0,Math.PI*2);
+        ctx.arc(px+CELL/2,py+CELL/2,CELL*0.27*pulse,0,Math.PI*2);
         ctx.fill();
         ctx.shadowBlur=0;
       }
@@ -540,7 +542,7 @@ function render(){
     const cx=pacman.px,cy=pacman.py;
     ctx.fillStyle=powerTimer>0?'#ffffff':'#ffd54a';
     ctx.shadowColor=powerTimer>0?'#ffffff':'#ffd54a';
-    ctx.shadowBlur=powerTimer>0?18:8;
+    ctx.shadowBlur=powerTimer>0?20:10;
     let ang=0;
     if(pacman.dir.x===1)ang=0;
     else if(pacman.dir.x===-1)ang=Math.PI;
@@ -548,7 +550,7 @@ function render(){
     else if(pacman.dir.y===-1)ang=-Math.PI/2;
     const mouth=Math.abs(Math.sin(pacman.mouth))*0.55;
     ctx.beginPath();
-    ctx.arc(cx,cy,CELL*0.44,ang+mouth,ang+Math.PI*2-mouth);
+    ctx.arc(cx,cy,CELL*0.48,ang+mouth,ang+Math.PI*2-mouth);
     ctx.lineTo(cx,cy);
     ctx.fill();
     ctx.shadowBlur=0;
@@ -561,9 +563,10 @@ function render(){
     const blink=fright&&powerTimer<2000&&Math.floor(performance.now()/200)%2===0;
     const col=blink?'#ffffff':(fright?'#3a7ee8':g.color);
     ctx.fillStyle=col;
+    ctx.shadowColor=col;ctx.shadowBlur=6;
     ctx.beginPath();
-    ctx.arc(cx,cy-CELL*0.12,CELL*0.42,Math.PI,0);
-    const w=CELL*0.42,bottom=cy+CELL*0.36;
+    ctx.arc(cx,cy-CELL*0.12,CELL*0.44,Math.PI,0);
+    const w=CELL*0.44,bottom=cy+CELL*0.38;
     ctx.lineTo(cx+w,bottom);
     for(let i=0;i<3;i++){
       const x1=cx+w-(i*2+1)*w/3;
@@ -574,6 +577,7 @@ function render(){
     }
     ctx.closePath();
     ctx.fill();
+    ctx.shadowBlur=0;
 
     if(fright){
       ctx.fillStyle='#fff';
@@ -589,14 +593,14 @@ function render(){
     } else {
       ctx.fillStyle='#fff';
       ctx.beginPath();
-      ctx.arc(cx-CELL*0.15,cy-CELL*0.08,CELL*0.14,0,Math.PI*2);
-      ctx.arc(cx+CELL*0.15,cy-CELL*0.08,CELL*0.14,0,Math.PI*2);
+      ctx.arc(cx-CELL*0.15,cy-CELL*0.08,CELL*0.15,0,Math.PI*2);
+      ctx.arc(cx+CELL*0.15,cy-CELL*0.08,CELL*0.15,0,Math.PI*2);
       ctx.fill();
       const dx=g.dir.x*CELL*0.06,dy=g.dir.y*CELL*0.06;
       ctx.fillStyle='#000';
       ctx.beginPath();
-      ctx.arc(cx-CELL*0.15+dx,cy-CELL*0.08+dy,CELL*0.07,0,Math.PI*2);
-      ctx.arc(cx+CELL*0.15+dx,cy-CELL*0.08+dy,CELL*0.07,0,Math.PI*2);
+      ctx.arc(cx-CELL*0.15+dx,cy-CELL*0.08+dy,CELL*0.08,0,Math.PI*2);
+      ctx.arc(cx+CELL*0.15+dx,cy-CELL*0.08+dy,CELL*0.08,0,Math.PI*2);
       ctx.fill();
     }
   }
@@ -758,13 +762,25 @@ function showToast(msg){
 }
 
 window.addEventListener('resize',()=>{try{resizeCanvas();render();}catch(e){}});
-window.addEventListener('orientationchange',()=>{_safeTimeout(()=>{resizeCanvas();render();},200);});
+window.addEventListener('orientationchange',()=>{setTimeout(()=>{resizeCanvas();render();},200);});
 window.addEventListener('blur',()=>{try{save();}catch(e){}});
 window.addEventListener('beforeunload',()=>{try{save();_clearAllTimers();}catch(e){}});
 
+/* ============ START ============ */
 level=Number(localStorage.getItem('pm_lv')||1);
-init();
-loop(performance.now());
+
+function startWhenReady(){
+  // Ждём пока .stage получит размеры
+  const stage=c.parentElement;
+  if(!stage||stage.clientWidth<50||stage.clientHeight<50){
+    setTimeout(startWhenReady,80);
+    return;
+  }
+  init();
+  loop(performance.now());
+}
+startWhenReady();
+
 })();
 </script>
 </body>

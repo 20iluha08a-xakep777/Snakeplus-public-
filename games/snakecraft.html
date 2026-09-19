@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Snake Craft</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:#0d1526;color:#e8eefc;font-family:system-ui,-apple-system,sans-serif;user-select:none;-webkit-tap-highlight-color:transparent;touch-action:none}
+#game{position:fixed;inset:0;z-index:1}
+canvas{display:block}
+.hud{position:fixed;top:8px;left:8px;z-index:10;font-size:11px;font-family:'Courier New',monospace;color:#7ee8b0;background:rgba(5,10,20,.6);padding:6px 10px;border-radius:6px;border:1px solid rgba(126,232,176,.3);pointer-events:none;letter-spacing:.5px;line-height:1.5}
+.hud .l{color:rgba(200,220,255,.5)}
+.hud b{color:#fff}
+.crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:10;pointer-events:none;width:22px;height:22px}
+.crosshair::before,.crosshair::after{content:'';position:absolute;background:rgba(255,255,255,.85);box-shadow:0 0 3px rgba(0,0,0,.8)}
+.crosshair::before{top:50%;left:0;right:0;height:2px;transform:translateY(-50%)}
+.crosshair::after{left:50%;top:0;bottom:0;width:2px;transform:translateX(-50%)}
+.closeBtn{position:fixed;top:8px;right:8px;z-index:10;width:36px;height:36px;border-radius:50%;border:2px solid #7ee8b0;background:rgba(0,0,0,.5);color:#7ee8b0;font-size:16px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.closeBtn:active{background:#7ee8b0;color:#06210f}
+.joy{position:fixed;bottom:20px;left:20px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle at 50% 50%,rgba(126,232,176,.08),rgba(15,22,40,.7) 70%);border:2px solid rgba(126,232,176,.35);z-index:10;touch-action:none}
+.joy .knob{position:absolute;top:50%;left:50%;width:48px;height:48px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#8ff5bd,#48c98a 60%,#1a2540);border:2px solid #7ee8b0;box-shadow:0 4px 16px rgba(126,232,176,.5);transform:translate(-50%,-50%);pointer-events:none}
+.btns{position:fixed;bottom:20px;right:16px;z-index:10;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.btns .row{display:flex;gap:8px}
+.gbtn{width:52px;height:52px;border-radius:50%;border:2px solid rgba(126,232,176,.5);background:rgba(0,0,0,.55);color:#7ee8b0;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);user-select:none}
+.gbtn:active{background:rgba(126,232,176,.3);transform:scale(.92)}
+.gbtn.jump{background:linear-gradient(180deg,rgba(126,232,176,.25),rgba(72,201,138,.1));width:64px;height:64px;font-size:26px}
+.gbtn.big{width:58px;height:58px}
+.inv{position:fixed;bottom:8px;left:50%;transform:translateX(-50%);z-index:10;display:flex;gap:4px;background:rgba(5,10,20,.65);padding:5px;border-radius:10px;border:1.5px solid rgba(126,232,176,.3);backdrop-filter:blur(4px)}
+.slot{width:44px;height:44px;border-radius:8px;border:1.5px solid rgba(126,232,176,.2);background:rgba(255,255,255,.04);display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;position:relative;touch-action:none}
+.slot.active{border-color:#7ee8b0;background:rgba(126,232,176,.15);box-shadow:0 0 0 2px rgba(126,232,176,.35)}
+.slot .key{position:absolute;top:1px;left:3px;font-size:8px;color:rgba(200,220,255,.5);font-weight:700}
+.msg{position:fixed;inset:0;background:rgba(5,10,20,.94);backdrop-filter:blur(6px);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center;z-index:100}
+.msg.show{display:flex}
+.msg h2{color:#7ee8b0;font-size:22px;letter-spacing:2px;text-transform:uppercase}
+.msg p{font-size:13px;color:rgba(200,220,255,.8);line-height:1.7;max-width:300px}
+.msg .row-btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.msg button{font:inherit;font-size:13px;font-weight:800;padding:12px 22px;border:2px solid #7ee8b0;border-radius:10px;background:linear-gradient(180deg,#8ff5bd,#48c98a);color:#06210f;cursor:pointer;letter-spacing:1px;text-transform:uppercase;min-width:110px}
+.msg button.ghost{background:transparent;color:#7ee8b0}
+.levels-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%;max-width:300px;margin-top:10px}
+.lv-btn{aspect-ratio:1.4;border-radius:10px;border:1.5px solid rgba(126,232,176,.3);background:rgba(126,232,176,.05);color:#7ee8b0;font:inherit;font-weight:800;font-size:14px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.lv-btn.done{background:linear-gradient(180deg,rgba(126,232,176,.3),rgba(72,201,138,.15));border-color:#7ee8b0}
+.lv-btn.locked{opacity:.35;cursor:default}
+.lv-btn.current{border-color:#ffd54a}
+.lv-btn .name{font-size:10px;color:rgba(200,220,255,.6);font-weight:600}
+.toast{position:fixed;top:60px;left:50%;transform:translateX(-50%) translateY(-150%);background:#7ee8b0;color:#06210f;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:800;z-index:200;transition:all .3s;white-space:nowrap}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.loader{position:fixed;inset:0;background:#050a14;z-index:150;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+.loader.hide{display:none}
+.loader h2{color:#7ee8b0;font-size:24px;letter-spacing:4px;font-family:'Courier New',monospace}
+.spinner{width:32px;height:32px;border:3px solid rgba(126,232,176,.2);border-top-color:#7ee8b0;border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loader .err{color:#ff8a8a;font-size:12px;max-width:280px;text-align:center;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="game"></div>
+
+<div class="loader" id="loader">
+  <h2>⛏ SNAKE CRAFT</h2>
+  <div class="spinner"></div>
+  <div class="err" id="loadErr"></div>
+</div>
+
+<div class="hud" id="hud" style="display:none">
+  <div><span class="l">Мир:</span> <b id="hLv">1</b></div>
+  <div><span class="l">XYZ:</span> <b id="hX">0</b> <b id="hY">0</b> <b id="hZ">0</b></div>
+  <div><span class="l">Блоков:</span> <b id="hBl">0</b>/<b id="hGoal">200</b></div>
+  <div><span class="l">💰</span> <b id="hCoins">0</b></div>
+  <div><span class="l">Цель:</span> <b id="hTgt">-</b></div>
+</div>
+
+<div class="crosshair" id="crosshair" style="display:none"></div>
+<button class="closeBtn" id="closeBtn" style="display:none">✕</button>
+
+<div class="joy" id="joy" style="display:none"><div class="knob" id="knob"></div></div>
+
+<div class="btns" id="btns" style="display:none">
+  <div class="row">
+    <button class="gbtn" id="bBreak" title="Сломать">⛏</button>
+    <button class="gbtn big" id="bPlace" title="Поставить">▣</button>
+  </div>
+  <div class="row">
+    <button class="gbtn jump" id="bJump" title="Прыжок">▲</button>
+  </div>
+</div>
+
+<div class="inv" id="inv" style="display:none"></div>
+
+<div class="msg" id="msg"></div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+
+// ============ СОСТОЯНИЕ ============
+const LEVELS=[
+  {name:'Поляна',seed:1,size:24},
+  {name:'Холмы',seed:7,size:26},
+  {name:'Лес',seed:13,size:28},
+  {name:'Пустыня',seed:21,size:28},
+  {name:'Горы',seed:42,size:30}
+];
+let level=Number(localStorage.getItem('sc_lv')||1);
+let blocksBroken=Number(localStorage.getItem('sc_bb_'+level)||0);
+let totalCoins=Number(localStorage.getItem('sc_coins')||0);
+let maxLevel=Number(localStorage.getItem('sc_maxlv')||1);
+let doneLevels=(()=>{try{return JSON.parse(localStorage.getItem('sc_done')||'[]');}catch(e){return[];}})();
+const GOAL_PER_LEVEL=200;
+const COIN_PER_BLOCK=1;
+
+function save(){
+  localStorage.setItem('sc_coins',totalCoins);
+  localStorage.setItem('sc_maxlv',maxLevel);
+  localStorage.setItem('sc_done',JSON.stringify(doneLevels));
+  localStorage.setItem('sc_lv',level);
+  localStorage.setItem('sc_bb_'+level,blocksBroken);
+}
+function postCoins(n){try{window.parent.postMessage({type:'addCoins',amount:n},'*');}catch(e){}}
+
+// ============ BLOCK TYPES ============
+const AIR=0, GRASS=1, DIRT=2, STONE=3, SAND=4, WOOD=5, LEAVES=6, WATER=7, BEDROCK=8;
+const BLOCK_COLORS={
+  [GRASS]:0x4aa848,
+  [DIRT]:0x6b4423,
+  [STONE]:0x808080,
+  [SAND]:0xe8d89a,
+  [WOOD]:0x6b4423,
+  [LEAVES]:0x2d7a2d,
+  [WATER]:0x3a7ec8,
+  [BEDROCK]:0x2a2a2a
+};
+const BLOCK_ICONS={[GRASS]:'🟩',[DIRT]:'🟫',[STONE]:'⬜',[SAND]:'🟨',[WOOD]:'🪵',[LEAVES]:'🍃',[WATER]:'🟦',[BEDROCK]:'⬛'};
+const BLOCK_NAMES={[GRASS]:'Трава',[DIRT]:'Земля',[STONE]:'Камень',[SAND]:'Песок',[WOOD]:'Дерево',[LEAVES]:'Листва',[WATER]:'Вода',[BEDROCK]:'Бедрок'};
+
+// ============ THREE INIT ============
+let scene, camera, renderer, worldGroup;
+let WORLD_SIZE=24, WORLD_HEIGHT=10;
+let map=[]; // [y][x][z] = type
+let mesh=null;
+let instancedMesh=null;
+let MAX_INSTANCES=8000;
+
+function initThree(){
+  scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x87CEEB);
+  scene.fog=new THREE.Fog(0x87CEEB, 30, 60);
+
+  camera=new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+
+  renderer=new THREE.WebGLRenderer({antialias:false, powerPreference:'low-power'});
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.5));
+  $('game').appendChild(renderer.domElement);
+
+  // Свет
+  const ambient=new THREE.AmbientLight(0xffffff,0.75);
+  scene.add(ambient);
+  const sun=new THREE.DirectionalLight(0xffffff,0.6);
+  sun.position.set(20,40,20);
+  scene.add(sun);
+
+  worldGroup=new THREE.Group();
+  scene.add(worldGroup);
+
+  window.addEventListener('resize',()=>{
+    camera.aspect=window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+}
+
+// ============ WORLD GENERATION ============
+let rngState=1;
+function rng(){
+  // Mulberry32
+  rngState=(rngState+0x6D2B79F5)>>>0;
+  let t=rngState;
+  t=Math.imul(t^(t>>>15), t|1);
+  t^=t+Math.imul(t^(t>>>7), t|61);
+  return ((t^(t>>>14))>>>0)/4294967296;
+}
+
+function noise2(x,z,seed){
+  // Простой "шум" через синусы
+  return (
+    Math.sin(x*0.18+seed*3.14) * 1.5 +
+    Math.cos(z*0.22+seed*1.7) * 1.3 +
+    Math.sin((x+z)*0.13+seed*2.3) * 1.1 +
+    Math.cos((x-z)*0.15+seed*0.9) * 0.9
+  );
+}
+
+function generateWorld(){
+  const lv=LEVELS[Math.min(level-1,LEVELS.length-1)];
+  WORLD_SIZE=lv.size;
+  rngState=lv.seed*1000+1;
+
+  map=[];
+  for(let y=0;y<WORLD_HEIGHT;y++){
+    map[y]=[];
+    for(let x=0;x<WORLD_SIZE;x++){
+      map[y][x]=[];
+      for(let z=0;z<WORLD_SIZE;z++){
+        map[y][x][z]=AIR;
+      }
+    }
+  }
+
+  // Высоты
+  const heights=[];
+  for(let x=0;x<WORLD_SIZE;x++){
+    heights[x]=[];
+    for(let z=0;z<WORLD_SIZE;z++){
+      let h=3 + Math.floor(noise2(x,z,lv.seed) * 1.2);
+      h=Math.max(2,Math.min(WORLD_HEIGHT-4,h));
+      heights[x][z]=h;
+    }
+  }
+
+  // Заполнение
+  const isDesert=lv.name==='Пустыня';
+  for(let x=0;x<WORLD_SIZE;x++){
+    for(let z=0;z<WORLD_SIZE;z++){
+      const h=heights[x][z];
+      for(let y=0;y<=h;y++){
+        if(y===0){ map[y][x][z]=BEDROCK; continue; }
+        if(y===h){
+          map[y][x][z]= isDesert ? SAND : GRASS;
+        } else if(y>=h-2){
+          map[y][x][z]= isDesert ? SAND : DIRT;
+        } else {
+          map[y][x][z]=STONE;
+        }
+      }
+      // Вода на низких уровнях (только для не-пустыни)
+      if(!isDesert && h<=3){
+        for(let y=h+1;y<=3;y++)map[y][x][z]=WATER;
+      }
+    }
+  }
+
+  // Деревья
+  const treeCount=isDesert?2:(lv.name==='Лес'?15:8);
+  for(let i=0;i<treeCount;i++){
+    const tx=Math.floor(rng()*(WORLD_SIZE-4))+2;
+    const tz=Math.floor(rng()*(WORLD_SIZE-4))+2;
+    const h=heights[tx][tz];
+    if(map[h][tx][tz]!==GRASS&&map[h][tx][tz]!==SAND)continue;
+    placeTree(tx,h+1,tz);
+  }
+
+  renderWorld();
+}
+
+function placeTree(x,y,z){
+  const trunkH=3+Math.floor(rng()*2);
+  for(let i=0;i<trunkH;i++){
+    if(y+i<WORLD_HEIGHT)map[y+i][x][z]=WOOD;
+  }
+  const leafY=y+trunkH;
+  for(let dx=-2;dx<=2;dx++)for(let dz=-2;dz<=2;dz++)for(let dy=-1;dy<=1;dy++){
+    const nx=x+dx,ny=leafY+dy,nz=z+dz;
+    if(nx<0||nz<0||nx>=WORLD_SIZE||nz>=WORLD_SIZE)continue;
+    if(ny<0||ny>=WORLD_HEIGHT)continue;
+    const d=Math.abs(dx)+Math.abs(dz)+Math.abs(dy);
+    if(d<=3 && map[ny][nx][nz]===AIR){
+      if(d===3 && rng()<0.5)continue;
+      map[ny][nx][nz]=LEAVES;
+    }
+  }
+}
+
+// ============ RENDER WORLD ============
+function isVisible(x,y,z){
+  // Видимый если есть сосед воздух
+  if(x===0||x===WORLD_SIZE-1||y===0||y===WORLD_HEIGHT-1||z===0||z===WORLD_SIZE-1)return true;
+  if(map[y+1]&&map[y+1][x][z]===AIR)return true;
+  if(map[y-1]&&map[y-1][x][z]===AIR)return true;
+  if(map[y][x+1]&&map[y][x+1][z]===AIR)return true;
+  if(map[y][x-1]&&map[y][x-1][z]===AIR)return true;
+  if(map[y][x][z+1]===AIR)return true;
+  if(map[y][x][z-1]===AIR)return true;
+  return false;
+}
+
+function renderWorld(){
+  if(instancedMesh){worldGroup.remove(instancedMesh);instancedMesh.dispose();instancedMesh=null;}
+
+  const positions=[];
+  const colors=[];
+  const typeArr=[];
+
+  for(let y=0;y<WORLD_HEIGHT;y++){
+    for(let x=0;x<WORLD_SIZE;x++){
+      for(let z=0;z<WORLD_SIZE;z++){
+        const t=map[y][x][z];
+        if(t===AIR)continue;
+        if(!isVisible(x,y,z))continue;
+        positions.push(x,y,z);
+        const col=new THREE.Color(BLOCK_COLORS[t]||0xff00ff);
+        // Небольшая вариация цвета
+        const v=0.92+rng()*0.16;
+        colors.push(col.r*v, col.g*v, col.b*v);
+        typeArr.push(t);
+      }
+    }
+  }
+
+  const count=typeArr.length;
+  if(count===0)return;
+
+  const geo=new THREE.BoxGeometry(1,1,1);
+  const mat=new THREE.MeshLambertMaterial({vertexColors:false});
+  instancedMesh=new THREE.InstancedMesh(geo, mat, count);
+
+  const matrix=new THREE.Matrix4();
+  const color=new THREE.Color();
+  for(let i=0;i<count;i++){
+    const x=positions[i*3]+0.5;
+    const y=positions[i*3+1]+0.5;
+    const z=positions[i*3+2]+0.5;
+    matrix.makeTranslation(x,y,z);
+    instancedMesh.setMatrixAt(i,matrix);
+    color.setRGB(colors[i*3],colors[i*3+1],colors[i*3+2]);
+    instancedMesh.setColorAt(i,color);
+  }
+  instancedMesh.instanceMatrix.needsUpdate=true;
+  if(instancedMesh.instanceColor)instancedMesh.instanceColor.needsUpdate=true;
+
+  worldGroup.add(instancedMesh);
+}
+
+// ============ PLAYER ============
+const player={
+  pos:new THREE.Vector3(),
+  vel:new THREE.Vector3(),
+  yaw:0,
+  pitch:0,
+  onGround:false,
+  height:1.7,
+  radius:0.3
+};
+
+const keys={};
+const joy={active:false, x:0, y:0};
+
+// Спавн игрока в центре на поверхности
+function spawnPlayer(){
+  const cx=Math.floor(WORLD_SIZE/2);
+  const cz=Math.floor(WORLD_SIZE/2);
+  let topY=WORLD_HEIGHT-1;
+  for(let y=WORLD_HEIGHT-1;y>=0;y--){
+    if(map[y][cx][cz]!==AIR){topY=y+2;break;}
+  }
+  player.pos.set(cx+0.5, topY, cz+0.5);
+  player.vel.set(0,0,0);
+  player.yaw=0;
+  player.pitch=0;
+}
+
+// ============ PHYSICS ============
+function isSolid(x,y,z){
+  if(x<0||z<0||x>=WORLD_SIZE||z>=WORLD_SIZE)return false;
+  if(y<0)return true;
+  if(y>=WORLD_HEIGHT)return false;
+  const t=map[y][x][z];
+  return t!==AIR && t!==WATER;
+}
+
+function collides(px,py,pz){
+  const r=player.radius;
+  const corners=[
+    [px-r,py,pz-r],[px+r,py,pz-r],
+    [px-r,py,pz+r],[px+r,py,pz+r],
+    [px-r,py+player.height-0.1,pz-r],
+    [px+r,py+player.height-0.1,pz+r],
+    [px-r,py+player.height*0.5,pz-r],
+    [px+r,py+player.height*0.5,pz+r]
+  ];
+  for(const [x,y,z] of corners){
+    if(isSolid(Math.floor(x),Math.floor(y),Math.floor(z)))return true;
+  }
+  return false;
+}
+
+function updatePlayer(dt){
+  // Направление от джойстика относительно yaw
+  const forwardX=-Math.sin(player.yaw);
+  const forwardZ=-Math.cos(player.yaw);
+  const rightX=Math.cos(player.yaw);
+  const rightZ=-Math.sin(player.yaw);
+
+  const speed=4.5;
+  const moveX=joy.x;
+  const moveZ=joy.y;
+
+  const targetVX=(forwardX*(-moveZ) + rightX*moveX)*speed;
+  const targetVZ=(forwardZ*(-moveZ) + rightZ*moveX)*speed;
+
+  // Плавное ускорение
+  player.vel.x += (targetVX-player.vel.x)*Math.min(dt*12,1);
+  player.vel.z += (targetVZ-player.vel.z)*Math.min(dt*12,1);
+
+  // Прыжок
+  if(keys.jump && player.onGround){
+    player.vel.y=6.5;
+    player.onGround=false;
+  }
+
+  // Гравитация
+  player.vel.y-=18*dt;
+  if(player.vel.y<-20)player.vel.y=-20;
+
+  // Collision по осям
+  let nx=player.pos.x+player.vel.x*dt;
+  if(!collides(nx, player.pos.y, player.pos.z)){
+    player.pos.x=nx;
+  } else {
+    player.vel.x=0;
+  }
+
+  let nz=player.pos.z+player.vel.z*dt;
+  if(!collides(player.pos.x, player.pos.y, nz)){
+    player.pos.z=nz;
+  } else {
+    player.vel.z=0;
+  }
+
+  let ny=player.pos.y+player.vel.y*dt;
+  if(!collides(player.pos.x, ny, player.pos.z)){
+    player.pos.y=ny;
+    player.onGround=false;
+  } else {
+    if(player.vel.y<0){
+      player.onGround=true;
+      // Выровнять по блоку
+      player.pos.y=Math.floor(player.pos.y)+0.001;
+    }
+    player.vel.y=0;
+  }
+
+  // Не падать в пустоту
+  if(player.pos.y<-10){
+    spawnPlayer();
+  }
+}
+
+// ============ CAMERA ============
+function updateCamera(){
+  camera.position.set(player.pos.x, player.pos.y+player.height, player.pos.z);
+  const dirX=-Math.sin(player.yaw)*Math.cos(player.pitch);
+  const dirY=Math.sin(player.pitch);
+  const dirZ=-Math.cos(player.yaw)*Math.cos(player.pitch);
+  camera.lookAt(
+    camera.position.x+dirX,
+    camera.position.y+dirY,
+    camera.position.z+dirZ
+  );
+}
+
+// ============ RAYCAST ============
+const ray=new THREE.Raycaster();
+const centerVec=new THREE.Vector2(0,0);
+
+function getLookAtBlock(){
+  // Простая ручная трассировка по DDA-подобному алгоритму
+  const dirX=-Math.sin(player.yaw)*Math.cos(player.pitch);
+  const dirY=Math.sin(player.pitch);
+  const dirZ=-Math.cos(player.yaw)*Math.cos(player.pitch);
+  const originX=player.pos.x;
+  const originY=player.pos.y+player.height;
+  const originZ=player.pos.z;
+
+  let stepX=Math.sign(dirX);
+  let stepY=Math.sign(dirY);
+  let stepZ=Math.sign(dirZ);
+
+  let tMaxX = stepX>0 ? (Math.floor(originX)+1-originX)/dirX : stepX<0 ? (Math.floor(originX)-originX)/dirX : Infinity;
+  let tMaxY = stepY>0 ? (Math.floor(originY)+1-originY)/dirY : stepY<0 ? (Math.floor(originY)-originY)/dirY : Infinity;
+  let tMaxZ = stepZ>0 ? (Math.floor(originZ)+1-originZ)/dirZ : stepZ<0 ? (Math.floor(originZ)-originZ)/dirZ : Infinity;
+
+  const tDeltaX = stepX!==0 ? Math.abs(1/dirX) : Infinity;
+  const tDeltaY = stepY!==0 ? Math.abs(1/dirY) : Infinity;
+  const tDeltaZ = stepZ!==0 ? Math.abs(1/dirZ) : Infinity;
+
+  let x=Math.floor(originX), y=Math.floor(originY), z=Math.floor(originZ);
+  let lastX=x, lastY=y, lastZ=z;
+  const maxDist=6;
+
+  for(let i=0;i<80;i++){
+    if(tMaxX<tMaxY && tMaxX<tMaxZ){
+      if(tMaxX>maxDist)break;
+      lastX=x;x+=stepX;tMaxX+=tDeltaX;
+    } else if(tMaxY<tMaxZ){
+      if(tMaxY>maxDist)break;
+      lastY=y;y+=stepY;tMaxY+=tDeltaY;
+    } else {
+      if(tMaxZ>maxDist)break;
+      lastZ=z;z+=stepZ;tMaxZ+=tDeltaZ;
+    }
+    if(x<0||y<0||z<0||x>=WORLD_SIZE||z>=WORLD_SIZE||y>=WORLD_HEIGHT)break;
+    const t=map[y][x][z];
+    if(t!==AIR && t!==WATER){
+      return {hit:{x,y,z}, place:{x:lastX,y:lastY,z:lastZ}};
+    }
+  }
+  return null;
+}
+
+// ============ ACTIONS ============
+let blocksTarget=null;
+
+function breakBlock(){
+  if(!gameActive)return;
+  const hit=getLookAtBlock();
+  if(!hit)return;
+  const {x,y,z}=hit.hit;
+  if(map[y][x][z]===BEDROCK){showToast('⬛ Бедрок нельзя');return;}
+  map[y][x][z]=AIR;
+  blocksBroken++;
+  if(blocksBroken>=GOAL_PER_LEVEL&&doneLevels.indexOf(level)===-1){
+    onLevelComplete();
+  }
+  updateHud();
+  renderWorld();
+  playBeep(400);
+}
+
+function placeBlock(){
+  if(!gameActive)return;
+  const hit=getLookAtBlock();
+  if(!hit)return;
+  const {x,y,z}=hit.place;
+  if(x<0||y<0||z<0||x>=WORLD_SIZE||y>=WORLD_HEIGHT||z>=WORLD_SIZE)return;
+  if(map[y][x][z]!==AIR)return;
+  // Не ставить внутрь игрока
+  const dx=Math.abs((x+0.5)-player.pos.x);
+  const dz=Math.abs((z+0.5)-player.pos.z);
+  if(dx<0.6 && dz<0.6){
+    const py=Math.floor(player.pos.y);
+    if(y>=py && y<py+player.height+0.5){
+      showToast('Нельзя внутрь себя');
+      return;
+    }
+  }
+  map[y][x][z]=currentBlock;
+  renderWorld();
+  playBeep(600);
+}
+
+function onLevelComplete(){
+  doneLevels.push(level);
+  const reward=100+level*50;
+  totalCoins+=reward;
+  postCoins(reward);
+  if(level+1>maxLevel)maxLevel=level+1;
+  save();
+  showModal('🎉 Мир исследован!',
+    'Добыто: '+blocksBroken+' блоков<br>+'+reward+' 💰<br>Открыт '+(maxLevel)+'-й мир',
+    [{label:'Следующий',cls:'primary',fn:()=>{level++;blocksBroken=0;save();closeModal();restart();}},
+     {label:'Миры',cls:'ghost',fn:()=>{closeModal();showLevels();}}]);
+  playBeep(1000);
+}
+
+// ============ HUD ============
+function updateHud(){
+  $('hLv').textContent=level+': '+LEVELS[Math.min(level-1,LEVELS.length-1)].name;
+  $('hX').textContent=Math.round(player.pos.x);
+  $('hY').textContent=Math.round(player.pos.y);
+  $('hZ').textContent=Math.round(player.pos.z);
+  $('hBl').textContent=blocksBroken;
+  $('hGoal').textContent=GOAL_PER_LEVEL;
+  $('hCoins').textContent=totalCoins;
+  // Целевой блок
+  const hit=getLookAtBlock();
+  if(hit){
+    const t=map[hit.hit.y][hit.hit.x][hit.hit.z];
+    $('hTgt').textContent=BLOCK_NAMES[t]||('#'+t);
+  } else {
+    $('hTgt').textContent='—';
+  }
+}
+
+// ============ INVENTORY ============
+const inventory=[GRASS,DIRT,STONE,SAND,WOOD,LEAVES];
+let currentBlock=GRASS;
+
+function renderInventory(){
+  const inv=$('inv');
+  inv.innerHTML='';
+  inventory.forEach((t,i)=>{
+    const slot=document.createElement('div');
+    slot.className='slot'+(t===currentBlock?' active':'');
+    slot.innerHTML='<span class="key">'+(i+1)+'</span><span>'+BLOCK_ICONS[t]+'</span>';
+    slot.addEventListener('click',()=>{currentBlock=t;renderInventory();});
+    inv.appendChild(slot);
+  });
+}
+
+// ============ INPUT ============
+function initInput(){
+  // Кнопки
+  $('bJump').addEventListener('pointerdown',e=>{e.preventDefault();keys.jump=true;});
+  $('bJump').addEventListener('pointerup',()=>{keys.jump=false;});
+  $('bJump').addEventListener('pointerleave',()=>{keys.jump=false;});
+  $('bJump').addEventListener('pointercancel',()=>{keys.jump=false;});
+  $('bBreak').addEventListener('click',()=>breakBlock());
+  $('bPlace').addEventListener('click',()=>placeBlock());
+  $('closeBtn').addEventListener('click',()=>{try{window.parent.postMessage({type:'exit'},'*');}catch(e){}});
+
+  // Клавиатура
+  document.addEventListener('keydown',e=>{
+    if(e.key===' '||e.key==='Space'){e.preventDefault();keys.jump=true;}
+    else if(e.key==='1'){currentBlock=inventory[0];renderInventory();}
+    else if(e.key==='2'){currentBlock=inventory[1];renderInventory();}
+    else if(e.key==='3'){currentBlock=inventory[2];renderInventory();}
+    else if(e.key==='4'){currentBlock=inventory[3];renderInventory();}
+    else if(e.key==='5'){currentBlock=inventory[4];renderInventory();}
+    else if(e.key==='6'){currentBlock=inventory[5];renderInventory();}
+    else if(e.key==='e'||e.key==='E'||e.key==='у'||e.key==='У'){breakBlock();}
+    else if(e.key==='q'||e.key==='Q'||e.key==='й'||e.key==='Й'){placeBlock();}
+    else if(e.key==='Escape')try{window.parent.postMessage({type:'exit'},'*');}catch(e){}
+  });
+  document.addEventListener('keyup',e=>{
+    if(e.key===' '||e.key==='Space')keys.jump=false;
+  });
+
+  // Джойстик
+  const joyEl=$('joy');
+  const knob=$('knob');
+  let joyId=null;
+  function setKnob(dx,dy){
+    const k=0.4;
+    knob.style.transform='translate(calc(-50% + '+(dx*k)+'px), calc(-50% + '+(dy*k)+'px))';
+  }
+  function handleJoyStart(e){
+    joyId=e.pointerId;
+    try{joyEl.setPointerCapture(joyId);}catch(err){}
+  }
+  function handleJoyMove(e){
+    if(e.pointerId!==joyId)return;
+    const r=joyEl.getBoundingClientRect();
+    const cx=r.left+r.width/2;
+    const cy=r.top+r.height/2;
+    let dx=e.clientX-cx;
+    let dy=e.clientY-cy;
+    const maxR=r.width*0.35;
+    const dist=Math.hypot(dx,dy);
+    if(dist>maxR){dx=dx/dist*maxR;dy=dy/dist*maxR;}
+    setKnob(dx,dy);
+    joy.x=dx/maxR;
+    joy.y=dy/maxR;
+  }
+  function handleJoyEnd(e){
+    if(e.pointerId!==joyId)return;
+    joyId=null;
+    setKnob(0,0);
+    joy.x=0;joy.y=0;
+  }
+  joyEl.addEventListener('pointerdown',handleJoyStart);
+  joyEl.addEventListener('pointermove',handleJoyMove);
+  joyEl.addEventListener('pointerup',handleJoyEnd);
+  joyEl.addEventListener('pointercancel',handleJoyEnd);
+
+  // Свайп по экрану для камеры
+  let camX=null,camY=null;
+  let camId=null;
+  const canvas=renderer.domElement;
+  canvas.addEventListener('pointerdown',e=>{
+    if(e.target.closest('.joy,.btns,.inv,.closeBtn'))return;
+    camId=e.pointerId;
+    camX=e.clientX;camY=e.clientY;
+    try{canvas.setPointerCapture(camId);}catch(err){}
+  });
+  canvas.addEventListener('pointermove',e=>{
+    if(e.pointerId!==camId)return;
+    const dx=e.clientX-camX;
+    const dy=e.clientY-camY;
+    camX=e.clientX;camY=e.clientY;
+    player.yaw -= dx*0.005;
+    player.pitch -= dy*0.005;
+    player.pitch=Math.max(-1.5,Math.min(1.5,player.pitch));
+  });
+  canvas.addEventListener('pointerup',e=>{
+    if(e.pointerId!==camId)return;
+    camId=null;
+  });
+  canvas.addEventListener('pointercancel',e=>{
+    if(e.pointerId!==camId)return;
+    camId=null;
+  });
+
+  // Сообщения от Snake+
+  window.addEventListener('message',e=>{
+    const d=e.data;if(!d||typeof d!=='object')return;
+    if(d.type==='input'){
+      if(d.act==='ok'||d.act==='a')breakBlock();
+      else if(d.act==='b')placeBlock();
+      else if(d.act==='up'){joy.y=-1;setTimeout(()=>{joy.y=0;},200);}
+      else if(d.act==='down'){joy.y=1;setTimeout(()=>{joy.y=0;},200);}
+      else if(d.act==='left'){joy.x=-1;setTimeout(()=>{joy.x=0;},200);}
+      else if(d.act==='right'){joy.x=1;setTimeout(()=>{joy.x=0;},200);}
+      else if(d.act==='back')try{window.parent.postMessage({type:'exit'},'*');}catch(e){}
+    }
+  });
+}
+
+// ============ GAME LOOP ============
+let gameActive=false;
+let lastTime=0;
+let fpsAccum=0,fpsCount=0,fpsDisplay=0;
+
+function loop(t){
+  const dt=Math.min((t-lastTime)/1000, 0.05);
+  lastTime=t;
+  if(gameActive){
+    updatePlayer(dt);
+    updateCamera();
+    renderer.render(scene,camera);
+
+    // HUD update periodically
+    fpsAccum+=dt;fpsCount++;
+    if(fpsAccum>0.5){
+      fpsDisplay=Math.round(fpsCount/fpsAccum);
+      fpsAccum=0;fpsCount=0;
+      updateHud();
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+// ============ MODAL ============
+function showModal(title,body,actions){
+  const m=$('msg');
+  m.innerHTML='';
+  const h=document.createElement('h2');h.textContent=title;m.appendChild(h);
+  const p=document.createElement('p');p.innerHTML=body;m.appendChild(p);
+  const row=document.createElement('div');row.className='row-btns';
+  actions.forEach(a=>{
+    const b=document.createElement('button');
+    b.textContent=a.label;b.className=a.cls||'';
+    b.onclick=a.fn;
+    row.appendChild(b);
+  });
+  m.appendChild(row);
+  m.classList.add('show');
+}
+function closeModal(){$('msg').classList.remove('show');}
+
+function showLevels(){
+  const m=$('msg');
+  m.innerHTML='';
+  const h=document.createElement('h2');h.textContent='🌍 Миры';m.appendChild(h);
+  const grid=document.createElement('div');grid.className='levels-grid';
+  LEVELS.forEach((lv,i)=>{
+    const n=i+1;
+    const done=doneLevels.indexOf(n)!==-1;
+    const locked=n>maxLevel;
+    const cur=n===level;
+    const el=document.createElement('div');
+    el.className='lv-btn'+(done?' done':'')+(locked?' locked':'')+(cur?' current':'');
+    el.innerHTML='<div>'+(done?'✓':'')+n+'</div><div class="name">'+lv.name+'</div>';
+    if(!locked)el.onclick=()=>{level=n;blocksBroken=Number(localStorage.getItem('sc_bb_'+n)||0);save();closeModal();restart();};
+    grid.appendChild(el);
+  });
+  m.appendChild(grid);
+  const row=document.createElement('div');row.className='row-btns';
+  const btn=document.createElement('button');
+  btn.textContent='Закрыть';btn.className='ghost';btn.onclick=closeModal;
+  row.appendChild(btn);
+  m.appendChild(row);
+  m.classList.add('show');
+}
+
+// ============ UTILS ============
+let audioCtx=null;
+function playBeep(freq){
+  try{
+    if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==='suspended')audioCtx.resume();
+    const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.type='square';o.frequency.value=freq;
+    g.gain.setValueAtTime(0.05,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.1);
+    o.connect(g).connect(audioCtx.destination);
+    o.start();o.stop(audioCtx.currentTime+0.1);
+  }catch(e){}
+}
+function showToast(msg){
+  const t=$('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer=setTimeout(()=>t.classList.remove('show'),1500);
+}
+
+// ============ START ============
+function restart(){
+  generateWorld();
+  spawnPlayer();
+  renderInventory();
+  blocksBroken=Number(localStorage.getItem('sc_bb_'+level)||0);
+  updateHud();
+  gameActive=true;
+}
+
+function start(){
+  if(typeof THREE==='undefined'){
+    $('loadErr').textContent='Three.js не загрузился. Проверь интернет.';
+    return;
+  }
+  try{
+    initThree();
+    generateWorld();
+    spawnPlayer();
+    initInput();
+    renderInventory();
+    updateHud();
+
+    $('loader').classList.add('hide');
+    $('hud').style.display='block';
+    $('crosshair').style.display='block';
+    $('closeBtn').style.display='flex';
+    $('joy').style.display='block';
+    $('btns').style.display='flex';
+    $('inv').style.display='flex';
+
+    gameActive=true;
+    requestAnimationFrame(loop);
+  }catch(err){
+    $('loadErr').textContent='Ошибка: '+err.message;
+    console.error(err);
+  }
+}
+
+window.addEventListener('load',()=>{
+  setTimeout(start,100);
+});
+
+// Экспорт на всякий
+window._scOpenLevels=showLevels;
+
+})();
+</script>
+</body>
+</html>

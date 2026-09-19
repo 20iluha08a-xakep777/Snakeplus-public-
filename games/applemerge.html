@@ -1,50 +1,478 @@
 <!DOCTYPE html>
-<html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"><title>Apple Merge</title>
-<style>*{box-sizing:border-box;margin:0;padding:0}html,body{height:100%;overflow:hidden}body{background:#0d1526;color:#e8eefc;font-family:system-ui,-apple-system,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;user-select:none;padding:8px;gap:8px}.hud{display:flex;gap:14px;font-size:11px;letter-spacing:1px;color:rgba(200,220,255,.6);text-transform:uppercase}.hud b{color:#7ee8b0;font-size:13px;margin-left:4px}.wrap{position:relative;display:flex}.msg{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(5,10,20,.94);border-radius:10px;gap:12px;padding:20px;text-align:center;z-index:10}.msg.show{display:flex}.msg h2{color:#7ee8b0;font-size:20px}.msg p{font-size:12px;color:rgba(200,220,255,.75);line-height:1.6}.msg button{font:inherit;font-size:13px;font-weight:700;padding:10px 22px;border:2px solid #7ee8b0;border-radius:8px;background:#7ee8b0;color:#06210f;cursor:pointer}</style></head><body>
-<div class="hud"><span>Ур.<b id="lv">1</b></span><span>Очки<b id="sc">0</b></span><span>Цель<b id="goal">500</b></span><span>💰<b id="coins">0</b></span></div>
-<div class="wrap"><canvas id="c" width="340" height="500"></canvas><div class="msg" id="msg"></div></div>
-<script>(function(){const $=id=>document.getElementById(id),c=$('c'),ctx=c.getContext('2d');
-const FRUITS=['🍒','🍓','🍇','🍊','🍎','🍉','👑'];
-const RADII=[14,20,27,36,46,58,72];
-const VALUES=[2,4,8,16,32,64,128];
-let balls=[],score=0,level=Number(localStorage.getItem('apple_lv')||1),alive=true,nextDrop=0,dropX=c.width/2,canDrop=true,cdTimer=0;
-let totalCoins=Number(localStorage.getItem('apple_coins')||0);
-const goalFor=l=>100*l;
-const dropable=()=>Math.min(4+Math.floor(level/2),6);
-function init(){balls=[];score=0;alive=true;nextDrop=Math.floor(Math.random()*dropable());dropX=c.width/2;canDrop=true;cdTimer=0;render();}
-function show(t,p,b,n){const m=$('msg');m.innerHTML='<h2>'+t+'</h2><p>'+p+'</p>';m.classList.add('show');const bt=document.createElement('button');bt.textContent=b;bt.onclick=()=>{m.classList.remove('show');n();};m.appendChild(bt);}
-function drop(){if(!canDrop||!alive)return;balls.push({x:dropX,y:80,vx:0,vy:0,r:RADII[nextDrop],idx:nextDrop});nextDrop=Math.floor(Math.random()*dropable());canDrop=false;cdTimer=600;setTimeout(()=>{canDrop=true;},600);}
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Apple Merge</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:#0d1526;color:#e8eefc;font-family:system-ui,-apple-system,sans-serif;user-select:none;-webkit-tap-highlight-color:transparent}
+.app{display:flex;flex-direction:column;height:100dvh;max-width:520px;margin:0 auto;padding:6px;gap:4px}
+.hdr{display:flex;justify-content:space-between;align-items:center;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(200,220,255,.5);padding:2px 6px;flex-shrink:0}
+.hdr b{color:#7ee8b0;font-size:12px;margin-left:3px}
+.hdr .coins{font-size:11px;color:#ffd54a;font-weight:800}
+.stage{flex:1;position:relative;display:flex;align-items:center;justify-content:center;min-height:0}
+canvas{background:#050a14;border-radius:14px;box-shadow:inset 0 0 30px rgba(0,0,0,.9),0 0 0 1.5px rgba(126,232,176,.25);display:block;touch-action:none}
+.row{display:flex;gap:6px;justify-content:center;flex-shrink:0;padding:0 4px}
+.fruit-strip{display:flex;gap:2px;justify-content:center;align-items:center;padding:4px 6px;background:rgba(255,255,255,.03);border-radius:10px;border:1px solid rgba(126,232,176,.15);overflow-x:auto;scrollbar-width:none;flex-shrink:0}
+.fruit-strip::-webkit-scrollbar{display:none}
+.fruit-cell{flex:0 0 auto;width:38px;height:38px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:8px;background:rgba(255,255,255,.03);position:relative;transition:all .2s}
+.fruit-cell .em{font-size:19px;line-height:1;filter:grayscale(1) opacity(.25);transition:filter .2s}
+.fruit-cell.unlocked .em{filter:none}
+.fruit-cell.current{background:rgba(126,232,176,.15);box-shadow:0 0 0 1.5px rgba(126,232,176,.5)}
+.fruit-cell .score{font-size:7px;color:#7ee8b0;font-weight:800;margin-top:1px;letter-spacing:.3px}
+.fruit-cell.locked .score{color:rgba(200,220,255,.25)}
+.btns{display:flex;gap:6px;padding:0 6px;flex-shrink:0}
+.btn{flex:1;font:inherit;font-weight:800;font-size:11px;letter-spacing:.8px;padding:11px 6px;border-radius:11px;cursor:pointer;border:1.5px solid;touch-action:manipulation;display:flex;align-items:center;justify-content:center;gap:4px;text-transform:uppercase;transition:transform .1s}
+.btn:active{transform:scale(.96)}
+.btn.shake{background:linear-gradient(180deg,rgba(126,232,176,.2),rgba(126,232,176,.05));color:#7ee8b0;border-color:rgba(126,232,176,.5)}
+.btn.bomb{background:linear-gradient(180deg,rgba(255,138,101,.2),rgba(255,138,101,.05));color:#ff8a65;border-color:rgba(255,138,101,.5)}
+.btn.bomb.active{background:linear-gradient(180deg,#ff8a65,#d04030);color:#fff;border-color:#ff8a65}
+.btn .badge{background:rgba(0,0,0,.4);border-radius:6px;font-size:9px;padding:2px 5px;font-weight:800}
+.msg{position:fixed;inset:0;background:rgba(5,10,20,.94);backdrop-filter:blur(6px);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center;z-index:100}
+.msg.show{display:flex}
+.msg h2{color:#7ee8b0;font-size:22px;letter-spacing:2px;text-transform:uppercase}
+.msg p{font-size:13px;color:rgba(200,220,255,.8);line-height:1.7;max-width:280px}
+.msg button{font:inherit;font-size:13px;font-weight:800;padding:12px 26px;border:2px solid #7ee8b0;border-radius:10px;background:linear-gradient(180deg,#8ff5bd,#48c98a);color:#06210f;cursor:pointer;letter-spacing:1px;text-transform:uppercase}
+.msg button.ghost{background:transparent;color:#7ee8b0}
+.msg .row-btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.levels-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;width:100%;max-width:320px;max-height:70vh;overflow-y:auto;padding:4px}
+.lv-btn{aspect-ratio:1;border-radius:10px;border:1.5px solid rgba(126,232,176,.3);background:rgba(126,232,176,.05);color:#7ee8b0;font:inherit;font-weight:800;font-size:16px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;position:relative;touch-action:manipulation}
+.lv-btn.done{background:linear-gradient(180deg,rgba(126,232,176,.3),rgba(72,201,138,.15));border-color:#7ee8b0}
+.lv-btn.locked{opacity:.35;cursor:default}
+.lv-btn.current{border-color:#ffd54a;box-shadow:0 0 0 2px rgba(255,213,74,.3)}
+.lv-btn .check{position:absolute;top:2px;right:4px;font-size:11px;color:#7ee8b0}
+.msg .hint{font-size:11px;color:rgba(200,220,255,.5);margin-top:4px}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="hdr">
+    <span>Ур.<b id="lv">1</b> · Очки<b id="sc">0</b> · Цель<b id="goal">200</b></span>
+    <span class="coins">💰 <span id="coins">0</span></span>
+  </div>
+  <div class="stage"><canvas id="c" width="320" height="380"></canvas></div>
+  <div class="fruit-strip" id="fruitStrip"></div>
+  <div class="btns">
+    <button class="btn shake" id="shakeBtn">🎲 Встряхнуть <span class="badge" id="shakeCnt">3</span></button>
+    <button class="btn bomb" id="bombBtn">💣 Бомба <span class="badge" id="bombCnt">3</span></button>
+  </div>
+</div>
+<div class="msg" id="msg"></div>
+
+<script>
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const c=$('c'),ctx=c.getContext('2d');
+const W=c.width,H=c.height;
+const FLOOR_Y=H-6;
+
+const FRUITS=[
+  {em:'🍒',r:12,v:1,color:'#e05260'},
+  {em:'🍓',r:16,v:3,color:'#ff4757'},
+  {em:'🍇',r:21,v:6,color:'#b07ee8'},
+  {em:'🍊',r:27,v:12,color:'#ffb84d'},
+  {em:'🍎',r:34,v:24,color:'#ff5757'},
+  {em:'🍑',r:42,v:50,color:'#ffb3a0'},
+  {em:'🍋',r:50,v:100,color:'#ffd54a'},
+  {em:'🍉',r:60,v:200,color:'#48c98a'},
+  {em:'🍍',r:72,v:400,color:'#ffdd55'},
+  {em:'🥝',r:86,v:800,color:'#9ccc65'},
+  {em:'🥭',r:102,v:1600,color:'#ff9c00'},
+  {em:'🍈',r:120,v:3200,color:'#a8e063'}
+];
+const DROPABLE=6; // можно дропать только первые 6
+
+// Состояние
+let balls=[],score=0,level=1,alive=true,canDrop=true,cdTimer=0;
+let dropX=W/2,nextIdx=0;
+let totalCoins=Number(localStorage.getItem('am_coins')||0);
+let shakeFree=3,bombFree=3;
+let shakeLeft=Number(localStorage.getItem('am_shake')||3);
+let bombLeft=Number(localStorage.getItem('am_bomb')||3);
+let maxLevel=Number(localStorage.getItem('am_maxlv')||1);
+let doneLevels=(()=>{try{return JSON.parse(localStorage.getItem('am_done')||'[]');}catch(e){return[];}})();
+let bombMode=false,bombSelectedId=null;
+
+const LV={goal:l=>200+ (l-1)*250, dropable:()=>Math.min(3+Math.floor((l-1)/2)+1,6)};
+function lvGoal(){return LV.goal(level);}
+function lvDropable(){return Math.min(3+Math.floor((level-1)/2),DROPABLE);}
+function save(){localStorage.setItem('am_coins',totalCoins);localStorage.setItem('am_shake',shakeLeft);localStorage.setItem('am_bomb',bombLeft);localStorage.setItem('am_maxlv',maxLevel);localStorage.setItem('am_done',JSON.stringify(doneLevels));}
+
+function postCoins(delta){try{window.parent.postMessage({type:'addCoins',amount:delta},'*');}catch(e){}}
+function postSpend(amount){try{window.parent.postMessage({type:'spendCoins',amount:amount},'*');}catch(e){}}
+
+// Инициализация
+function init(){
+  balls=[];score=0;alive=true;cdTimer=0;canDrop=true;bombMode=false;bombSelectedId=null;
+  nextIdx=Math.floor(Math.random()*lvDropable());
+  dropX=W/2;
+  renderStrip();
+  render();
+}
+
+// Спавн шара
+let nextId=1;
+function drop(){
+  if(!canDrop||!alive)return;
+  balls.push({
+    id:nextId++,x:dropX,y:60,vx:0,vy:0,idx:nextIdx,
+    r:FRUITS[nextIdx].r,
+    born:performance.now()
+  });
+  nextIdx=Math.floor(Math.random()*lvDropable());
+  canDrop=false;cdTimer=350;
+  setTimeout(()=>{canDrop=true;},cdTimer);
+}
+
+// Физика
 function step(dt){
-const dtN=dt/16.67;
-for(const b of balls){b.vy+=0.5*dtN;b.x+=b.vx*dtN;b.y+=b.vy*dtN;b.vx*=0.98;
-if(b.x-b.r<0){b.x=b.r;b.vx=-b.vx*0.5;}if(b.x+b.r>c.width){b.x=c.width-b.r;b.vx=-b.vx*0.5;}
-if(b.y+b.r>c.height-4){b.y=c.height-4-b.r;b.vy=-b.vy*0.3;b.vx*=0.9;}
+  const dtN=Math.min(dt/16.67,2.5);
+  for(const b of balls){
+    b.vy+=0.55*dtN;
+    if(b.vy>12)b.vy=12;
+    b.x+=b.vx*dtN;
+    b.y+=b.vy*dtN;
+    b.vx*=0.985;
+    if(b.x-b.r<0){b.x=b.r;b.vx=-b.vx*0.4;}
+    if(b.x+b.r>W){b.x=W-b.r;b.vx=-b.vx*0.4;}
+    if(b.y+b.r>FLOOR_Y){b.y=FLOOR_Y-b.r;if(b.vy>0.5){b.vy=-b.vy*0.15;b.vx*=0.92;}else b.vy=0;}
+  }
+  // Коллизии шар-шар
+  for(let i=0;i<balls.length;i++){
+    for(let j=i+1;j<balls.length;j++){
+      const a=balls[i],b=balls[j];
+      const dx=b.x-a.x,dy=b.y-a.y;
+      const d=Math.hypot(dx,dy),min=a.r+b.r;
+      if(d<min&&d>0.01){
+        const nx=dx/d,ny=dy/d,over=(min-d)/2;
+        a.x-=nx*over*0.5;a.y-=ny*over*0.5;
+        b.x+=nx*over*0.5;b.y+=ny*over*0.5;
+        const rvx=a.vx-b.vx,rvy=a.vy-b.vy;
+        const rel=rvx*nx+rvy*ny;
+        if(rel>0){
+          const imp=rel*0.55;
+          a.vx-=imp*nx;a.vy-=imp*ny;
+          b.vx+=imp*nx;b.vy+=imp*ny;
+        }
+        // Merge
+        if(a.idx===b.idx&&a.idx<FRUITS.length-1){
+          const newIdx=a.idx+1;
+          const nx2=(a.x+b.x)/2,ny2=(a.y+b.y)/2;
+          const nv=a.vx+b.vx,nvy=a.vy+b.vy;
+          a.dead=true;
+          b.dead=true;
+          const merged={
+            id:nextId++,x:nx2,y:ny2,vx:nv*0.5,vy:nvy*0.5,
+            idx:newIdx,r:FRUITS[newIdx].r,born:performance.now(),pop:1
+          };
+          balls.push(merged);
+          score+=FRUITS[newIdx].v;
+          $('sc').textContent=score;
+          checkWin();
+        }
+      }
+    }
+  }
+  // Чистка + анимация pop
+  balls=balls.filter(b=>!b.dead);
+  for(const b of balls){
+    if(b.pop){b.pop-=dt/300;if(b.pop<0)b.pop=0;}
+  }
+  if(cdTimer>0)cdTimer-=dt;
 }
-for(let i=0;i<balls.length;i++)for(let j=i+1;j<balls.length;j++){
-const a=balls[i],b=balls[j];const dx=b.x-a.x,dy=b.y-a.y;const d=Math.hypot(dx,dy);const min=a.r+b.r;
-if(d<min&&d>0.001){const nx=dx/d,ny=dy/d,overlap=(min-d)/2;
-a.x-=nx*overlap;a.y-=ny*overlap;b.x+=nx*overlap;b.y+=ny*overlap;
-const relVx=a.vx-b.vx,relVy=a.vy-b.vy;const relV=relVx*nx+relVy*ny;
-if(relV>0){const imp=relV*0.7;a.vx-=imp*nx;a.vy-=imp*ny;b.vx+=imp*nx;b.vy+=imp*ny;}
-if(a.idx===b.idx&&a.idx<FRUITS.length-1){a.idx++;a.r=RADII[a.idx];b.dead=true;score+=VALUES[a.idx];}
-}}
-balls=balls.filter(b=>!b.dead);
-if(cdTimer>0)cdTimer-=dt;
-if(balls.length>20){alive=false;checkLose();}
+
+function checkWin(){
+  if(score>=lvGoal()){
+    if(doneLevels.indexOf(level)===-1){doneLevels.push(level);}
+    const reward=40+level*20;
+    totalCoins+=reward;
+    postCoins(reward);
+    if(level+1>maxLevel)maxLevel=level+1;
+    save();
+    showModal('🎉 Уровень пройден!',
+      '+'+reward+' 💰 за победу<br>Очки: '+score+'/'+lvGoal()+'<br>Уровень '+level+' — открыт '+maxLevel+'-й',
+      [{label:'Следующий',cls:'primary',fn:()=>{level++;save();init();closeModal();}},
+       {label:'Меню уровней',cls:'ghost',fn:()=>{closeModal();showLevels();}}]);
+  }
 }
-function checkLose(){for(const b of balls)if(b.y<60&&Math.abs(b.vy)<1&&b.idx<2){alive=false;level=1;localStorage.setItem('apple_lv',1);show('😔 Переполнение','Очки: '+score+'<br>Начинаем с 1-го','Заново',init);return;}}
-function checkWin(){if(score>=goalFor(level)){const r=30+level*15;totalCoins+=r;localStorage.setItem('apple_coins',totalCoins);try{window.parent.postMessage({type:'addCoins',amount:r},'*');}catch(e){}level++;localStorage.setItem('apple_lv',level);show('🎉 Уровень пройден!','+'+r+'💰','Дальше',init);}}
+
+function checkLose(){
+  const now=performance.now();
+  for(const b of balls){
+    if(b.y-b.r<15 && Math.abs(b.vy)<0.8 && now-b.born>1500 && b.idx<=1){
+      alive=false;
+      showModal('😔 Переполнение!',
+        'Очки: '+score+'<br>Уровень '+level+' — не пройден',
+        [{label:'Заново',cls:'primary',fn:()=>{closeModal();init();}},
+         {label:'Меню уровней',cls:'ghost',fn:()=>{closeModal();showLevels();}}]);
+      return;
+    }
+  }
+}
+
+// Кнопка Встряхнуть
+function shake(){
+  if(!alive)return;
+  if(shakeLeft<=0){
+    // Купить за 20 монет Snake+
+    if(totalCoins<20){showToast('✗ Мало монет (нужно 20)');return;}
+    totalCoins-=20;postSpend(20);save();
+    shakeLeft++;
+    showToast('✓ Куплено за 20 💰');
+  }
+  shakeLeft--;
+  save();
+  for(const b of balls){
+    b.vx+=(Math.random()-0.5)*20;
+    b.vy-=Math.random()*8+3;
+  }
+  updateButtons();
+  playBeep(400);
+}
+
+// Кнопка Бомба
+function toggleBomb(){
+  if(!alive)return;
+  if(bombMode){bombMode=false;bombSelectedId=null;updateButtons();return;}
+  if(bombLeft<=0){
+    if(totalCoins<50){showToast('✗ Мало монет (нужно 50)');return;}
+    totalCoins-=50;postSpend(50);save();
+    bombLeft++;
+    showToast('✓ Куплено за 50 💰');
+  }
+  bombMode=true;
+  showToast('💣 Тапни по фрукту для удаления');
+  updateButtons();
+}
+
+function deleteBall(id){
+  const i=balls.findIndex(b=>b.id===id);
+  if(i<0)return;
+  balls.splice(i,1);
+  bombLeft--;save();
+  bombMode=false;
+  updateButtons();
+  playBeep(300);
+}
+
+function updateButtons(){
+  $('shakeCnt').textContent=shakeLeft;
+  $('bombCnt').textContent=bombLeft;
+  const bb=$('bombBtn');
+  if(bombMode)bb.classList.add('active');else bb.classList.remove('active');
+}
+
+// Рендер
 function render(){
-ctx.fillStyle='#050a14';ctx.fillRect(0,0,c.width,c.height);
-ctx.strokeStyle='rgba(126,232,176,.3)';ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(0,80);ctx.lineTo(c.width,80);ctx.stroke();ctx.setLineDash([]);
-for(const b of balls){ctx.font=(b.r*2)+'px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(FRUITS[b.idx],b.x,b.y);}
-if(canDrop){ctx.font=(RADII[nextDrop]*2)+'px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(FRUITS[nextDrop],dropX,40);}
-$('lv').textContent=level;$('sc').textContent=score;$('goal').textContent=goalFor(level);$('coins').textContent=totalCoins;
+  ctx.fillStyle='#050a14';ctx.fillRect(0,0,W,H);
+
+  // Сетка
+  ctx.strokeStyle='rgba(126,232,176,.04)';ctx.lineWidth=1;
+  for(let i=40;i<H;i+=40){ctx.beginPath();ctx.moveTo(0,i);ctx.lineTo(W,i);ctx.stroke();}
+  for(let i=40;i<W;i+=40){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,H);ctx.stroke();}
+
+  // Линия старта
+  ctx.strokeStyle='rgba(126,232,176,.25)';ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(0,60);ctx.lineTo(W,60);ctx.stroke();ctx.setLineDash([]);
+
+  // Фрукты
+  for(const b of balls){
+    const f=FRUITS[b.idx];
+    const s=1+(b.pop||0)*0.3;
+    ctx.save();
+    ctx.translate(b.x,b.y);
+    if(b.pop)ctx.scale(s,s);
+    // Тень
+    ctx.shadowColor=f.color;ctx.shadowBlur=b.pop?20:8;
+    ctx.font=(b.r*2.1)+'px serif';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(f.em,0,0);
+    ctx.shadowBlur=0;
+    if(bombMode){
+      ctx.strokeStyle='rgba(255,138,101,'+(0.4+Math.sin(performance.now()/200)*0.3)+')';
+      ctx.lineWidth=2;
+      ctx.beginPath();ctx.arc(0,0,b.r*1.15,0,Math.PI*2);ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Следующий фрукт
+  if(canDrop&&alive){
+    ctx.save();ctx.globalAlpha=0.7;
+    const f=FRUITS[nextIdx];
+    ctx.font=(f.r*2.1)+'px serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(f.em,dropX,40);
+    // Направляющая
+    ctx.strokeStyle='rgba(126,232,176,.15)';ctx.setLineDash([3,5]);
+    ctx.beginPath();ctx.moveTo(dropX,60);ctx.lineTo(dropX,FLOOR_Y);ctx.stroke();ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  $('sc').textContent=score;
+  $('lv').textContent=level;
+  $('goal').textContent=lvGoal();
+  $('coins').textContent=totalCoins;
 }
-let last=0;function loop(t){if(!alive)return;const dt=Math.min(t-last,50);last=t;step(dt);checkWin();render();requestAnimationFrame(loop);}
-c.addEventListener('touchstart',e=>{dropX=e.touches[0].clientX-((window.innerWidth-c.width)/2);dropX=Math.max(20,Math.min(c.width-20,dropX));});
-c.addEventListener('touchend',()=>drop());
-c.addEventListener('click',e=>{const rect=c.getBoundingClientRect();dropX=e.clientX-rect.left;drop();});
-document.addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();drop();}else if(e.key==='ArrowLeft')dropX=Math.max(20,dropX-20);else if(e.key==='ArrowRight')dropX=Math.min(c.width-20,dropX+20);});
-window.addEventListener('message',e=>{const d=e.data;if(!d||typeof d!=='object')return;if(d.type==='input'){if(d.act==='left')dropX=Math.max(20,dropX-20);else if(d.act==='right')dropX=Math.min(c.width-20,dropX+20);else if(d.act==='ok'||d.act==='a')drop();else if(d.act==='back')try{window.parent.postMessage({type:'exit'},'*');}catch(e){}}});
-init();requestAnimationFrame(loop);})();</script></body></html>
+
+// Ряд фруктов
+function renderStrip(){
+  const strip=$('fruitStrip');
+  strip.innerHTML='';
+  const maxUnlocked=Math.max(...balls.map(b=>b.idx),nextIdx,0);
+  for(let i=0;i<FRUITS.length;i++){
+    const f=FRUITS[i];
+    const cell=document.createElement('div');
+    cell.className='fruit-cell';
+    const unlocked=i<=maxUnlocked;
+    if(unlocked)cell.classList.add('unlocked');else cell.classList.add('locked');
+    if(i===nextIdx)cell.classList.add('current');
+    cell.innerHTML='<span class="em">'+f.em+'</span><span class="score">'+f.v+'</span>';
+    strip.appendChild(cell);
+  }
+}
+
+let last=0;
+function loop(t){
+  const dt=Math.min(t-last,60);last=t;
+  if(alive){
+    step(dt);
+    checkLose();
+  }
+  render();
+  requestAnimationFrame(loop);
+}
+
+// Управление
+c.addEventListener('touchstart',e=>{
+  if(bombMode)return;
+  const rect=c.getBoundingClientRect();
+  const tx=(e.touches[0].clientX-rect.left)*(W/rect.width);
+  dropX=Math.max(20,Math.min(W-20,tx));
+},{passive:true});
+c.addEventListener('touchend',()=>{
+  if(bombMode)return;
+  drop();
+},{passive:true});
+c.addEventListener('click',e=>{
+  const rect=c.getBoundingClientRect();
+  const tx=(e.clientX-rect.left)*(W/rect.width);
+  const ty=(e.clientY-rect.top)*(H/rect.height);
+  if(bombMode){
+    // Ищем фрукт под пальцем
+    let hit=null;
+    for(let i=balls.length-1;i>=0;i--){
+      const b=balls[i];
+      if(Math.hypot(b.x-tx,b.y-ty)<b.r*1.2){hit=b;break;}
+    }
+    if(hit)deleteBall(hit.id);
+    return;
+  }
+  dropX=Math.max(20,Math.min(W-20,tx));
+  drop();
+});
+document.addEventListener('keydown',e=>{
+  if(e.key===' '||e.key==='Enter'){e.preventDefault();if(bombMode)toggleBomb();else drop();}
+  else if(e.key==='ArrowLeft')dropX=Math.max(20,dropX-20);
+  else if(e.key==='ArrowRight')dropX=Math.min(W-20,dropX+20);
+  else if(e.key==='s'||e.key==='S')shake();
+  else if(e.key==='b'||e.key==='B')toggleBomb();
+  else if(e.key==='Escape')try{window.parent.postMessage({type:'exit'},'*');}catch(e){}
+});
+$('shakeBtn').addEventListener('click',shake);
+$('bombBtn').addEventListener('click',toggleBomb);
+
+window.addEventListener('message',e=>{
+  const d=e.data;if(!d||typeof d!=='object')return;
+  if(d.type==='input'){
+    if(d.act==='left')dropX=Math.max(20,dropX-20);
+    else if(d.act==='right')dropX=Math.min(W-20,dropX+20);
+    else if(d.act==='ok'||d.act==='a'){if(bombMode)toggleBomb();else drop();}
+    else if(d.act==='b'){toggleBomb();}
+    else if(d.act==='up'){shake();}
+    else if(d.act==='back')try{window.parent.postMessage({type:'exit'},'*');}catch(e){}
+  }
+});
+
+// Modal
+function showModal(title,body,actions){
+  const m=$('msg');
+  let html='<h2>'+title+'</h2><p>'+body+'</p><div class="row-btns">';
+  m.innerHTML=html;
+  const row=document.createElement('div');row.className='row-btns';
+  (actions||[]).forEach(a=>{
+    const btn=document.createElement('button');
+    btn.textContent=a.label;
+    btn.className=a.cls||'';
+    btn.onclick=()=>a.fn();
+    row.appendChild(btn);
+  });
+  m.innerHTML='<h2>'+title+'</h2><p>'+body+'</p>';
+  m.appendChild(row);
+  m.classList.add('show');
+}
+function closeModal(){$('msg').classList.remove('show');}
+
+function showLevels(){
+  const m=$('msg');
+  let html='<h2>🗺 Уровни</h2><div class="levels-grid">';
+  for(let i=1;i<=20;i++){
+    const done=doneLevels.indexOf(i)!==-1;
+    const cur=i===level;
+    const locked=i>maxLevel;
+    const cls='lv-btn'+(done?' done':'')+(cur?' current':'')+(locked?' locked':'');
+    html+='<div class="'+cls+'" data-lv="'+i+'"'+(locked?' ':'')+'>'+(done?'<span class="check">✓</span>':'')+i+'</div>';
+  }
+  html+='</div>';
+  m.innerHTML=html;
+  const row=document.createElement('div');row.className='row-btns';
+  const btn=new HTMLButtonElement ? document.createElement('button') : document.createElement('button');
+  btn.textContent='Закрыть';btn.className='ghost';
+  btn.onclick=()=>{closeModal();};
+  row.appendChild(btn);
+  m.appendChild(row);
+  m.querySelectorAll('.lv-btn').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const lv=Number(el.dataset.lv);
+      if(lv>maxLevel){showToast('Уровень не открыт');return;}
+      level=lv;save();closeModal();init();
+    });
+  });
+}
+
+// Звук
+let audioCtx=null;
+function playBeep(freq){
+  try{
+    if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.type='triangle';o.frequency.value=freq;
+    g.gain.setValueAtTime(0.08,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.15);
+    o.connect(g).connect(audioCtx.destination);
+    o.start();o.stop(audioCtx.currentTime+0.15);
+  }catch(e){}
+}
+
+function showToast(msg){
+  const t=document.createElement('div');
+  t.style.cssText='position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#7ee8b0;color:#06210f;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:800;z-index:200;animation:fadeOut 2s forwards';
+  t.textContent=msg;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(),2100);
+}
+const style=document.createElement('style');
+style.textContent='@keyframes fadeOut{0%{opacity:1;transform:translateX(-50%) translateY(0)}80%{opacity:1}100%{opacity:0;transform:translateX(-50%) translateY(-20px)}}';
+document.head.appendChild(style);
+
+// Init
+level=Number(localStorage.getItem('am_lv')||1);
+init();
+updateButtons();
+requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>

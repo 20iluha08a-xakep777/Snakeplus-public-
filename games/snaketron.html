@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"><title>Snake Tron</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}html,body{height:100%;overflow:hidden}body{background:#0d1526;color:#e8eefc;font-family:system-ui,-apple-system,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;user-select:none;padding:8px;gap:8px}.hud{display:flex;gap:14px;font-size:11px;letter-spacing:1px;color:rgba(200,220,255,.6);text-transform:uppercase}.hud b{color:#7ee8b0;font-size:13px;margin-left:4px}.wrap{position:relative;display:flex}.msg{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(5,10,20,.94);border-radius:10px;gap:12px;padding:20px;text-align:center;z-index:10}.msg.show{display:flex}.msg h2{color:#7ee8b0;font-size:20px}.msg p{font-size:12px;color:rgba(200,220,255,.75);line-height:1.6}.msg button{font:inherit;font-size:13px;font-weight:700;padding:10px 22px;border:2px solid #7ee8b0;border-radius:8px;background:#7ee8b0;color:#06210f;cursor:pointer}.pad{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:6px;max-width:180px;width:58vw}.pad button{aspect-ratio:1;font:inherit;border:1.5px solid #2a3a5c;border-radius:8px;color:#cfe0ff;font-size:16px;font-weight:700;background:linear-gradient(180deg,#2a3a5c,#1a2540);cursor:pointer}.pad button:active{color:#7ee8b0;border-color:#7ee8b0}.pad .ok{color:#06210f;border-color:#7ee8b0;background:linear-gradient(180deg,#8ff5bd,#48c98a)}</style></head><body>
+<div class="hud"><span>Ур.<b id="lv">1</b></span><span>Раунд<b id="rd">1</b></span><span>Побед<b id="wn">0</b></span><span>💰<b id="coins">0</b></span></div>
+<div class="wrap"><canvas id="c" width="380" height="380"></canvas><div class="msg" id="msg"></div></div>
+<div class="pad" id="pad"></div>
+<script>(function(){const $=id=>document.getElementById(id),c=$('c'),ctx=c.getContext('2d');
+const S=30,CELL=c.width/S;
+let you,enemy,youDir,enemyDir,trail,alive,level,round,wins,alive2;
+let totalCoins=Number(localStorage.getItem('tron_coins')||0);
+function init(){you={x:5,y:Math.floor(S/2)};enemy={x:S-6,y:Math.floor(S/2)};youDir={x:1,y:0};enemyDir={x:-1,y:0};trail={you:new Set(),enemy:new Set()};alive=true;alive2=true;step1();}
+function isWall(x,y){return x<0||y<0||x>=S||y>=S;}
+function checkHit(p,tr1,tr2){if(isWall(p.x,p.y))return true;if(tr1.has(p.x+','+p.y))return true;if(tr2.has(p.x+','+p.y))return true;return false;}
+let acc=0,last=0;
+function step1(){
+const ny={x:you.x+youDir.x,y:you.y+youDir.y};
+const ne={x:enemy.x+enemyDir.x,y:enemy.y+enemyDir.y};
+// ИИ врага: ищет путь, избегает препятствий
+const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
+let best=null;
+for(const d of dirs){const nx=enemy.x+d[0],ny2=enemy.y+d[1];const p={x:nx,y:ny2};if(d[0]===-enemyDir.x&&d[1]===-enemyDir.y)continue;
+if(checkHit(p,trail.you,trail.enemy))continue;
+const distToYou=Math.abs(nx-you.x)+Math.abs(ny2-you.y);
+const open=dirs.reduce((a,dd)=>{const px=nx+dd[0],py=ny2+dd[1];if(!isWall(px,py)&&!trail.you.has(px+','+py)&&!trail.enemy.has(px+','+py))a++;return a;},0);
+const score2=open*10-Math.abs(distToYou-8);
+if(!best||score2>best.s)best={d,s:score2};}
+if(best)enemyDir={x:best.d[0],y:best.d[1]};
+else enemyDir={x:-enemyDir.x,y:-enemyDir.y};
+const hit1=checkHit(ny,trail.you,trail.enemy);
+const hit2=checkHit(ne,trail.you,trail.enemy);
+trail.you.add(you.x+','+you.y);trail.enemy.add(enemy.x+','+enemy.y);
+if(hit1&&hit2){alive=false;show('🤝 Ничья!','—','Дальше',init);return;}
+if(hit1){alive=false;round=1;show('💀 Ты врезался!','Побед: '+wins,'Заново',()=>{init();});return;}
+if(hit2){wins++;const r=20+level*10;totalCoins+=r;localStorage.setItem('tron_coins',totalCoins);try{window.parent.postMessage({type:'addCoins',amount:r},'*');}catch(e){}if(wins>=3){level++;wins=0;localStorage.setItem('tron_lv',level);show('🎉 Уровень пройден!','+'+r+'💰','Дальше',init);return;}show('🏆 Раунд!','+'+r+'💰<br>Счёт '+wins+'/3','Дальше',init);return;}
+you=ny;enemy=ne;render();}
+function show(t,p,b,n){const m=$('msg');m.innerHTML='<h2>'+t+'</h2><p>'+p+'</p>';m.classList.add('show');const bt=document.createElement('button');bt.textContent=b;bt.onclick=()=>{m.classList.remove('show');n();};m.appendChild(bt);}
+function render(){ctx.fillStyle='#050a14';ctx.fillRect(0,0,c.width,c.height);
+ctx.strokeStyle='rgba(126,232,176,.1)';ctx.lineWidth=1;for(let i=1;i<S;i++){ctx.beginPath();ctx.moveTo(i*CELL,0);ctx.lineTo(i*CELL,c.height);ctx.stroke();ctx.beginPath();ctx.moveTo(0,i*CELL);ctx.lineTo(c.width,i*CELL);ctx.stroke();}
+trail.you.forEach(k=>{const[x,y]=k.split(',').map(Number);ctx.fillStyle='rgba(126,232,176,.3)';ctx.fillRect(+x*CELL+1,+y*CELL+1,CELL-2,CELL-2);});
+trail.enemy.forEach(k=>{const[x,y]=k.split(',').map(Number);ctx.fillStyle='rgba(255,138,101,.3)';ctx.fillRect(+x*CELL+1,+y*CELL+1,CELL-2,CELL-2);});
+ctx.fillStyle='#7ee8b0';ctx.fillRect(you.x*CELL+1,you.y*CELL+1,CELL-2,CELL-2);
+ctx.fillStyle='#ff8a65';ctx.fillRect(enemy.x*CELL+1,enemy.y*CELL+1,CELL-2,CELL-2);
+$('lv').textContent=level;$('rd').textContent=round;$('wn').textContent=wins;$('coins').textContent=totalCoins;}
+function loop(t){const dt=Math.min(t-last,100);last=t;acc+=dt;if(acc>80&&alive){acc=0;step1();}if(alive)requestAnimationFrame(loop);}
+const pad=$('pad');[{},{l:'▲',d:[0,-1]},{},{l:'◀',d:[-1,0]},{l:'OK',ok:1},{l:'▶',d:[1,0]},{},{l:'▼',d:[0,1]},{}].forEach(it=>{const b=document.createElement('button');b.textContent=it.l||'';if(it.ok)b.className='ok';b.addEventListener('click',()=>{if(it.ok){if(!alive)init();}else if(it.d){const dd={x:it.d[0],y:it.d[1]};if(dd.x===-youDir.x&&dd.y===-youDir.y)return;youDir=dd;}});pad.appendChild(b);});
+document.addEventListener('keydown',e=>{const m={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1],a:[-1,0],d:[1,0],w:[0,-1],s:[0,1]}[e.key];if(m){e.preventDefault();const dd={x:m[0],y:m[1]};if(dd.x===-youDir.x&&dd.y===-youDir.y)return;youDir=dd;}});
+let sx=0,sy=0;c.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY;},{passive:true});c.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;if(Math.hypot(dx,dy)<20)return;const dd=Math.abs(dx)>Math.abs(dy)?{x:dx>0?1:-1,y:0}:{x:0,y:dy>0?1:-1};if(dd.x===-youDir.x&&dd.y===-youDir.y)return;youDir=dd;},{passive:true});
+window.addEventListener('message',e=>{const d=e.data;if(!d||typeof d!=='object')return;if(d.type==='input'){const m={left:{x:-1,y:0},right:{x:1,y:0},up:{x:0,y:-1},down:{x:0,y:1}};if(m[d.act]){const dd=m[d.act];if(dd.x===-youDir.x&&dd.y===-youDir.y)return;youDir=dd;}else if(d.act==='ok'&&!alive)init();else if(d.act==='back')try{window.parent.postMessage({type:'exit'},'*');}catch(e){}}});
+level=Number(localStorage.getItem('tron_lv')||1);wins=0;round=1;init();requestAnimationFrame(loop);})();</script></body></html>

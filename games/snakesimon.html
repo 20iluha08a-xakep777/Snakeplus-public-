@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"><title>Snake Simon</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}html,body{height:100%;overflow:hidden}body{background:#0d1526;color:#e8eefc;font-family:system-ui,-apple-system,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;user-select:none;padding:8px;gap:8px}.hud{display:flex;gap:14px;font-size:11px;letter-spacing:1px;color:rgba(200,220,255,.6);text-transform:uppercase}.hud b{color:#7ee8b0;font-size:13px;margin-left:4px}.wrap{position:relative;display:flex}.msg{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(5,10,20,.94);border-radius:10px;gap:12px;padding:20px;text-align:center;z-index:10}.msg.show{display:flex}.msg h2{color:#7ee8b0;font-size:20px}.msg p{font-size:12px;color:rgba(200,220,255,.75);line-height:1.6}.msg button{font:inherit;font-size:13px;font-weight:700;padding:10px 22px;border:2px solid #7ee8b0;border-radius:8px;background:#7ee8b0;color:#06210f;cursor:pointer}</style></head><body>
+<div class="hud"><span>Ур.<b id="lv">1</b></span><span>Длина<b id="len">3</b></span><span>Очки<b id="sc">0</b></span><span>💰<b id="coins">0</b></span></div>
+<div class="wrap"><canvas id="c" width="320" height="320"></canvas><div class="msg" id="msg"></div></div>
+<script>(function(){const $=id=>document.getElementById(id),c=$('c'),ctx=c.getContext('2d');
+const N=4,CELL=c.width/N;
+const COLORS=['#7ee8b0','#ffd54a','#ff8a65','#66d9ff'];
+const FREQS=[261.63,329.63,392.00,523.25];
+let seq=[],step=0,score=0,level=Number(localStorage.getItem('simon_lv')||1),alive=true,playing=false,active=-1,activeEnd=0;
+let totalCoins=Number(localStorage.getItem('simon_coins')||0);
+let audioCtx=null;
+function beep(f){try{if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();const osc=audioCtx.createOscillator(),g=audioCtx.createGain();osc.type='triangle';osc.frequency.value=f;g.gain.setValueAtTime(0.15,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.3);osc.connect(g).connect(audioCtx.destination);osc.start();osc.stop(audioCtx.currentTime+0.3);}catch(e){}}
+function newRound(){seq=[];const len=2+level;for(let i=0;i<len;i++)seq.push(Math.floor(Math.random()*4));step=0;playing=false;setTimeout(playSequence,400);}
+function playSequence(){playing=true;let i=0;const play=()=>{if(i>=seq.length){playing=false;return;}const idx=seq[i];active=idx;activeEnd=performance.now()+400;beep(FREQS[idx]);i++;setTimeout(play,600);};play();}
+function pick(idx){if(playing)return;active=idx;activeEnd=performance.now()+200;beep(FREQS[idx]);
+if(idx!==seq[step]){alive=false;level=1;localStorage.setItem('simon_lv',1);show('😔 Ошибка!','Длина: '+seq.length,'Заново',()=>{score=0;newRound();});return;}
+step++;
+if(step>=seq.length){score+=seq.length*10;const r=15+level*6;totalCoins+=r;localStorage.setItem('simon_coins',totalCoins);try{window.parent.postMessage({type:'addCoins',amount:r},'*');}catch(e){}level++;localStorage.setItem('simon_lv',level);show('🎉 Уровень пройден!','+'+r+'💰<br>Длина '+seq.length,'Дальше',newRound);}}
+function show(t,p,b,n){const m=$('msg');m.innerHTML='<h2>'+t+'</h2><p>'+p+'</p>';m.classList.add('show');const bt=document.createElement('button');bt.textContent=b;bt.onclick=()=>{m.classList.remove('show');n();};m.appendChild(bt);}
+function render(){ctx.fillStyle='#050a14';ctx.fillRect(0,0,c.width,c.height);
+for(let i=0;i<4;i++){const x=(i%2)*CELL,y=Math.floor(i/2)*CELL;
+const isActive=active===i&&performance.now()<activeEnd;
+ctx.fillStyle=isActive?COLORS[i]:'rgba(255,255,255,.05)';
+ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x+4,y+4,CELL-8,CELL-8,10);else ctx.rect(x+4,y+4,CELL-8,CELL-8);ctx.fill();
+if(isActive){ctx.strokeStyle=COLORS[i];ctx.lineWidth=3;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x+4,y+4,CELL-8,CELL-8,10);else ctx.rect(x+4,y+4,CELL-8,CELL-8);ctx.stroke();}}
+$('lv').textContent=level;$('len').textContent=seq.length;$('sc').textContent=score;$('coins').textContent=totalCoins;}
+let last=0;function loop(t){if(!alive)return;render();requestAnimationFrame(loop);}
+c.addEventListener('click',e=>{if(!alive||playing)return;const rect=c.getBoundingClientRect();const x=e.clientX-rect.left,y=e.clientY-rect.top;const col=Math.floor(x/CELL),row=Math.floor(y/CELL);pick(row*2+col);});
+document.addEventListener('keydown',e=>{if(playing)return;const m={ArrowLeft:0,ArrowUp:1,ArrowRight:2,ArrowDown:3,1:0,2:1,3:2,4:3};if(m[e.key]!==undefined){e.preventDefault();pick(m[e.key]);}});
+window.addEventListener('message',e=>{const d=e.data;if(!d||typeof d!=='object')return;if(d.type==='input'){if(playing)return;const m={left:0,up:1,right:2,down:3};if(m[d.act]!==undefined)pick(m[d.act]);else if(d.act==='back')try{window.parent.postMessage({type:'exit'},'*');}catch(e){}}});
+newRound();requestAnimationFrame(loop);})();</script></body></html>
